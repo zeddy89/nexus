@@ -1,21 +1,22 @@
-# Build artifacts
+# Rust build artifacts
 /target/
 **/*.rs.bk
 *.pdb
 
-# Cargo (keep Cargo.lock for binaries)
-# Cargo.lock - KEPT for reproducible builds
+# Cargo (keep Cargo.lock for reproducible builds)
+# Cargo.lock - KEPT for binary crate
 
 # IDE and editor files
 .idea/
 .vscode/
+*.iml
 *.swp
 *.swo
 *~
 .*.swp
-
-# Claude Code
-.claude/
+.project
+.classpath
+.settings/
 
 # OS files
 .DS_Store
@@ -26,18 +27,13 @@
 ehthumbs.db
 Thumbs.db
 
-# Test files
+# Claude Code
+.claude/
+
+# Nexus-specific
+.nexus-checkpoints/
 *.test.yaml
 *.test.yml
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.log
-
-# Checkpoints
-.nexus-checkpoints/
 
 # Vault password files (never commit these!)
 .vault_pass
@@ -50,6 +46,23 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Secrets and keys
+*.pem
+*.key
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.log
+
+# Debug and profiling
+*.prof
+perf.data
+perf.data.old
+flamegraph.svg
+
 # Coverage reports
 *.lcov
 coverage/
+tarpaulin-report.html
