@@ -33,6 +33,7 @@ pub fn call_builtin(
         "any" => builtin_any(args),
         "all" => builtin_all(args),
         "print" => builtin_print(args),
+        "iif" => builtin_iif(args),
         _ => Err(NexusError::Runtime {
             function: Some(name.to_string()),
             message: format!("Unknown function: {}", name),
@@ -641,6 +642,23 @@ fn builtin_print(args: Vec<Value>) -> Result<Value, NexusError> {
     let output: Vec<String> = args.iter().map(|v| v.to_string()).collect();
     println!("{}", output.join(" "));
     Ok(Value::Null)
+}
+
+/// Inline if - iif(condition, value_if_true, value_if_false)
+fn builtin_iif(args: Vec<Value>) -> Result<Value, NexusError> {
+    if args.len() < 3 {
+        return Err(NexusError::Runtime {
+            function: Some("iif".to_string()),
+            message: "iif requires 3 arguments: iif(condition, true_value, false_value)".to_string(),
+            suggestion: Some("Example: iif(x > 0, 'positive', 'non-positive')".to_string()),
+        });
+    }
+
+    if args[0].is_truthy() {
+        Ok(args[1].clone())
+    } else {
+        Ok(args[2].clone())
+    }
 }
 
 // String methods

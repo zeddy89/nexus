@@ -64,6 +64,7 @@ impl ExpressionConverter {
         );
         filter_map.insert("default", FilterConversion::Custom(convert_default));
         filter_map.insert("d", FilterConversion::Custom(convert_default));
+        filter_map.insert("ternary", FilterConversion::Custom(convert_ternary));
 
         // Special variable mappings
         let mut variable_map = HashMap::new();
@@ -120,6 +121,24 @@ impl ExpressionConverter {
     pub fn convert_expression(&self, expr: &str) -> (String, Vec<String>, Vec<String>) {
         let warnings = Vec::new();
         let mut unsupported = Vec::new();
+
+        // Handle Jinja2 inline-if syntax: 'value' if condition else 'other'
+        // This needs to be done before filter chain processing
+        let inline_if_re = Regex::new(r"^(.+?)\s+if\s+(.+?)\s+else\s+(.+)$").unwrap();
+        if let Some(caps) = inline_if_re.captures(expr.trim()) {
+            let true_val = caps[1].trim();
+            let condition = caps[2].trim();
+            let false_val = caps[3].trim();
+            // Recursively convert each part in case they have filters
+            let (cond_conv, _, _) = self.convert_expression(condition);
+            let (true_conv, _, _) = self.convert_expression(true_val);
+            let (false_conv, _, _) = self.convert_expression(false_val);
+            return (
+                format!("iif({}, {}, {})", cond_conv, true_conv, false_conv),
+                warnings,
+                unsupported,
+            );
+        }
 
         // Handle filter chains: variable | filter1 | filter2(arg)
         let parts: Vec<&str> = expr.split('|').map(|s| s.trim()).collect();
@@ -304,6 +323,16 @@ fn convert_default(base: &str, args: &str) -> String {
     }
 }
 
+/// Convert Ansible's ternary filter to Nexus's iif() function
+/// Example: condition | ternary('yes', 'no') -> iif(condition, 'yes', 'no')
+fn convert_ternary(base: &str, args: &str) -> String {
+    if args.is_empty() {
+        format!("iif({}, true, false)", base)
+    } else {
+        format!("iif({}, {})", base, args)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +382,19 @@ mod tests {
             result.output,
             "${available_updates.results != null and len(available_updates.results) > 0}"
         );
+    }
+
+    #[test]
+    fn test_inline_if() {
+        let converter = ExpressionConverter::new();
+        let result = converter.convert_string("{{ 'yes' if condition else 'no' }}");
+        assert_eq!(result.output, "${iif(condition, 'yes', 'no')}");
+    }
+
+    #[test]
+    fn test_ternary_filter() {
+        let converter = ExpressionConverter::new();
+        let result = converter.convert_string("{{ my_var | ternary('enabled', 'disabled') }}");
+        assert_eq!(result.output, "${iif(my_var, 'enabled', 'disabled')}");
     }
 }
