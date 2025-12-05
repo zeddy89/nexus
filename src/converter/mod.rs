@@ -19,6 +19,32 @@ use std::path::{Path, PathBuf};
 type PlayConversionResult =
     Result<(String, (usize, usize, usize), Vec<ConversionIssue>), NexusError>;
 
+/// Normalize Ansible module names by stripping collection prefixes (FQCN).
+/// Converts "ansible.builtin.dnf" -> "dnf", "ansible.posix.sysctl" -> "sysctl", etc.
+fn normalize_module_name(name: &str) -> String {
+    // Common Ansible collection prefixes to strip
+    const COLLECTION_PREFIXES: &[&str] = &[
+        "ansible.builtin.",
+        "ansible.posix.",
+        "ansible.netcommon.",
+        "ansible.utils.",
+        "ansible.windows.",
+        "community.general.",
+        "community.mysql.",
+        "community.postgresql.",
+        "community.docker.",
+    ];
+
+    for prefix in COLLECTION_PREFIXES {
+        if let Some(stripped) = name.strip_prefix(prefix) {
+            return stripped.to_string();
+        }
+    }
+
+    // If no known prefix, return as-is
+    name.to_string()
+}
+
 /// Options for conversion
 #[derive(Debug, Clone, Default)]
 pub struct ConversionOptions {
@@ -356,17 +382,30 @@ impl Converter {
             "import_tasks",
         ];
 
+        // First check for short module names directly
         for module in &known_modules {
             if let Some(args) = task.module_args.get(*module) {
-                module_name = Some(*module);
+                module_name = Some(module.to_string());
                 module_args = Some(args.clone());
                 break;
             }
         }
 
+        // If not found, check for FQCN (ansible.builtin.*, ansible.posix.*, etc.)
+        if module_name.is_none() {
+            for (key, args) in &task.module_args {
+                let normalized = normalize_module_name(key);
+                if known_modules.contains(&normalized.as_str()) {
+                    module_name = Some(normalized);
+                    module_args = Some(args.clone());
+                    break;
+                }
+            }
+        }
+
         // Convert the module
         if let (Some(name), Some(args)) = (module_name, module_args) {
-            match self.module_mapper.convert(name, &args) {
+            match self.module_mapper.convert(&name, &args) {
                 Ok(conv_result) => {
                     output.push_str(&conv_result.action_line);
                     output.push('\n');
