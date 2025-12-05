@@ -239,6 +239,156 @@ all:
               environment: prod-special  # Highest priority
 ```
 
+## Playbook-embedded Hosts
+
+As an alternative to inventory files, you can define hosts directly in your playbooks. This is useful for self-contained playbooks, environment-specific configurations, or when managing small, stable host sets.
+
+### Basic Syntax
+
+Instead of using a pattern (like `hosts: all` or `hosts: webservers`), provide a list of host definitions:
+
+```yaml
+hosts:
+  - name: web-server-01
+    address: 192.168.1.10
+    user: admin
+  - name: web-server-02
+    address: 192.168.1.11
+    user: admin
+  - name: db-server-01
+    address: 192.168.1.20
+    user: postgres
+
+tasks:
+  - name: Configure servers
+    command: echo "Configuring ${host.name}"
+```
+
+### With Optional Parameters
+
+```yaml
+hosts:
+  - name: web1
+    address: 192.168.1.10
+    user: deploy
+    port: 2222              # Custom SSH port (default: 22)
+    vars:
+      role: webserver
+      environment: production
+
+  - name: db1
+    address: 192.168.1.20
+    user: dbadmin
+    port: 22
+    vars:
+      role: database
+      db_port: 5432
+
+tasks:
+  - name: Access host variables
+    command: echo "${host.name} is a ${host.vars.role} in ${host.vars.environment}"
+```
+
+### Host Parameters
+
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|---------|
+| `name` | Host identifier (used in task output) | Yes | - |
+| `address` | IP address or hostname | Yes | - |
+| `user` | SSH username | No | Current user |
+| `port` | SSH port | No | 22 |
+| `vars` | Custom host-specific variables | No | {} |
+
+### Accessing Embedded Host Variables
+
+Custom variables defined in the `vars` section can be accessed using `${host.vars.variable_name}`:
+
+```yaml
+hosts:
+  - name: app-server
+    address: 10.0.1.10
+    user: deploy
+    vars:
+      app_port: 8080
+      app_env: production
+      app_version: "2.1.0"
+      ssl_enabled: true
+
+tasks:
+  - name: Deploy application
+    command: /opt/deploy.sh --version ${host.vars.app_version}
+
+  - name: Configure application
+    file: /etc/app/config.json
+    content: |
+      {
+        "port": ${host.vars.app_port},
+        "environment": "${host.vars.app_env}",
+        "ssl": ${host.vars.ssl_enabled}
+      }
+```
+
+### Using with Host Patterns
+
+Even with embedded hosts, you can still use conditional execution based on variables:
+
+```yaml
+hosts:
+  - name: web1
+    address: 192.168.1.10
+    vars:
+      group: webservers
+  - name: web2
+    address: 192.168.1.11
+    vars:
+      group: webservers
+  - name: db1
+    address: 192.168.1.20
+    vars:
+      group: databases
+
+tasks:
+  - name: Only on web servers
+    command: systemctl restart nginx
+    when: ${host.vars.group == "webservers"}
+
+  - name: Only on database servers
+    command: systemctl restart postgresql
+    when: ${host.vars.group == "databases"}
+```
+
+### Running Playbooks with Embedded Hosts
+
+No inventory file is needed:
+
+```bash
+# Just run the playbook directly
+nexus run playbook.yml
+
+# With connection options
+nexus run playbook.yml --private-key ~/.ssh/id_ed25519
+
+# Limit to specific hosts
+nexus run playbook.yml --limit web1,web2
+```
+
+### When to Use Embedded Hosts
+
+**Good for:**
+- Self-contained, portable playbooks
+- Environment-specific deployments (dev, staging, prod)
+- Small host sets (< 20 hosts)
+- Playbooks with dedicated infrastructure
+- Documentation-as-code approaches
+
+**Avoid when:**
+- Managing large infrastructure (> 50 hosts)
+- Multiple playbooks share the same hosts
+- Need complex host grouping and inheritance
+- Want central inventory management
+
+See [Inventory-less Execution](inventory-less-execution.md) for more details on running playbooks without inventory files.
+
 ## Viewing Inventory
 
 ```bash

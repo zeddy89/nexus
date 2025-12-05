@@ -2,7 +2,7 @@
 
 use std::io::{self, Write};
 use std::str::FromStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,10 +11,11 @@ use colored::*;
 use parking_lot::Mutex;
 
 use nexus::executor::{Scheduler, SchedulerConfig, TagFilter};
-use nexus::inventory::Inventory;
+use nexus::inventory::{Inventory, NetworkScanner, DiscoveredHost, DiscoveryDaemon, Notifier, Host, HostGroup, ProbeType};
 use nexus::output::{NexusError, OutputFormat, OutputWriter};
 use nexus::parser::{parse_playbook_file, parse_playbook_file_with_vault};
-use nexus::parser::ast::TaskOrBlock;
+use nexus::parser::ast::{HostPattern, Playbook, TaskOrBlock, Value};
+use nexus::converter::{Converter, ConversionOptions, ConversionReport, IssueSeverity};
 
 #[derive(Parser)]
 #[command(
@@ -52,7 +53,19 @@ enum Commands {
 
         /// Path to the inventory file
         #[arg(short, long)]
-        inventory: PathBuf,
+        inventory: Option<PathBuf>,
+
+        /// Comma-separated host list (alternative to inventory file)
+        #[arg(short = 'H', long)]
+        hosts: Option<String>,
+
+        /// Discover hosts from subnet instead of inventory
+        #[arg(long)]
+        discover: Option<String>,  // e.g., "10.20.30.0/24"
+
+        /// Filter discovered hosts
+        #[arg(long)]
+        discover_filter: Option<String>,
 
         /// Limit to specific hosts (comma-separated)
         #[arg(short, long)]
@@ -189,7 +202,11 @@ enum Commands {
 
         /// Path to the inventory file
         #[arg(short, long)]
-        inventory: PathBuf,
+        inventory: Option<PathBuf>,
+
+        /// Comma-separated host list (alternative to inventory file)
+        #[arg(short = 'H', long)]
+        hosts: Option<String>,
 
         /// Limit to specific hosts
         #[arg(short, long)]
@@ -234,6 +251,127 @@ enum Commands {
         /// Prompt for vault password
         #[arg(long)]
         ask_vault_pass: bool,
+    },
+
+    /// Discover hosts on a network
+    Discover {
+        /// Subnet to scan (CIDR notation, e.g., 192.168.1.0/24)
+        #[arg(long)]
+        subnet: Option<String>,
+
+        /// File containing list of subnets to scan
+        #[arg(long)]
+        subnets_from: Option<PathBuf>,
+
+        /// Passive mode - read from ARP cache, no packets sent
+        #[arg(long)]
+        passive: bool,
+
+        /// Use ARP cache for passive discovery
+        #[arg(long)]
+        from_arp: bool,
+
+        /// Probe type: ssh, ping, or tcp:port1,port2
+        #[arg(long, default_value = "ssh")]
+        probe: String,
+
+        /// Discovery profile file
+        #[arg(long)]
+        profile: Option<PathBuf>,
+
+        /// Enable OS fingerprinting
+        #[arg(long)]
+        fingerprint: bool,
+
+        /// Save discovered hosts to inventory file
+        #[arg(long)]
+        save_to: Option<PathBuf>,
+
+        /// Filter expression (e.g., "port:22 AND os:linux")
+        #[arg(long)]
+        filter: Option<String>,
+
+        /// Jump host for scanning remote networks
+        #[arg(long)]
+        via: Option<String>,
+
+        /// Connection timeout in milliseconds
+        #[arg(long, default_value = "1000")]
+        timeout: u64,
+
+        /// Max concurrent probes
+        #[arg(long, default_value = "100")]
+        parallel: usize,
+
+        /// Run as daemon for continuous monitoring
+        #[arg(long)]
+        daemon: bool,
+
+        /// Subnets to watch in daemon mode (comma-separated)
+        #[arg(long)]
+        watch: Option<String>,
+
+        /// Scan interval for daemon mode (e.g., 5m, 1h)
+        #[arg(long, default_value = "5m")]
+        interval: String,
+
+        /// Notification on changes (webhook:URL, file:PATH, or stdout)
+        #[arg(long)]
+        notify_on_change: Option<String>,
+    },
+
+    /// Convert Ansible playbooks to Nexus format
+    Convert {
+        /// Source file or directory to convert
+        source: PathBuf,
+
+        /// Output file or directory
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Show what would be converted without writing files
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Approve each file conversion interactively
+        #[arg(long)]
+        interactive: bool,
+
+        /// Convert entire project (playbooks, roles, inventory)
+        #[arg(long)]
+        all: bool,
+
+        /// Also convert inventory files
+        #[arg(long)]
+        include_inventory: bool,
+
+        /// Also convert Jinja2 templates to Nexus syntax
+        #[arg(long)]
+        include_templates: bool,
+
+        /// Keep Jinja2 syntax in templates (don't convert to ${})
+        #[arg(long)]
+        keep_jinja2: bool,
+
+        /// Write conversion report to file
+        #[arg(long)]
+        report: Option<PathBuf>,
+
+        /// Fail on any conversion warning
+        #[arg(long)]
+        strict: bool,
+
+        /// Minimal output
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Detailed conversion log
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Assessment mode - scan and report without converting
+        #[arg(long)]
+        assess: bool,
     },
 }
 
@@ -328,6 +466,9 @@ async fn main() {
         Commands::Run {
             playbook,
             inventory,
+            hosts,
+            discover,
+            discover_filter,
             limit,
             check,
             diff,
@@ -353,6 +494,9 @@ async fn main() {
             run_playbook(
                 playbook,
                 inventory,
+                hosts,
+                discover,
+                discover_filter,
                 limit,
                 check,
                 diff,
@@ -392,6 +536,7 @@ async fn main() {
         Commands::Plan {
             playbook,
             inventory,
+            hosts,
             limit,
             user,
             password,
@@ -407,6 +552,7 @@ async fn main() {
             handle_plan_command(
                 playbook,
                 inventory,
+                hosts,
                 limit,
                 user,
                 password,
@@ -422,6 +568,75 @@ async fn main() {
             )
             .await
         }
+        Commands::Discover {
+            subnet,
+            subnets_from,
+            passive,
+            from_arp,
+            probe,
+            profile,
+            fingerprint,
+            save_to,
+            filter,
+            via,
+            timeout,
+            parallel,
+            daemon,
+            watch,
+            interval,
+            notify_on_change,
+        } => {
+            handle_discover_command(
+                subnet,
+                subnets_from,
+                passive,
+                from_arp,
+                probe,
+                profile,
+                fingerprint,
+                save_to,
+                filter,
+                via,
+                timeout,
+                parallel,
+                daemon,
+                watch,
+                interval,
+                notify_on_change,
+            )
+            .await
+        }
+        Commands::Convert {
+            source,
+            output,
+            dry_run,
+            interactive,
+            all,
+            include_inventory,
+            include_templates,
+            keep_jinja2,
+            report,
+            strict,
+            quiet,
+            verbose,
+            assess,
+        } => {
+            handle_convert_command(
+                source,
+                output,
+                dry_run,
+                interactive,
+                all,
+                include_inventory,
+                include_templates,
+                keep_jinja2,
+                report,
+                strict,
+                quiet,
+                verbose,
+                assess,
+            )
+        }
     };
 
     if let Err(e) = result {
@@ -430,10 +645,132 @@ async fn main() {
     }
 }
 
+/// Resolve inventory from various sources with priority order
+///
+/// Priority order:
+/// 1. CLI --discover flag (live network scan) - highest priority
+/// 2. CLI --hosts flag (explicit host list)
+/// 3. Inventory file (--inventory / -i)
+/// 4. Playbook-embedded hosts (HostPattern::Inline)
+/// 5. Implicit localhost (when playbook has hosts: localhost -> HostPattern::Localhost)
+/// 6. Error if none available
+async fn resolve_inventory(
+    inventory_path: Option<&Path>,
+    cli_hosts: Option<&str>,
+    discover_subnet: Option<&str>,
+    discover_filter: Option<&str>,
+    playbook: &Playbook,
+    default_user: Option<&str>,
+) -> Result<Inventory, NexusError> {
+    // 1. CLI --discover flag takes highest priority (live network scan)
+    if let Some(subnet) = discover_subnet {
+        let scanner = NetworkScanner::new();
+        let discovered_hosts = scanner.scan_subnet(subnet).await?;
+
+        // Filter hosts if filter is provided
+        let filtered_hosts = if let Some(filter_str) = discover_filter {
+            // Simple filtering by OS family for now
+            discovered_hosts.into_iter()
+                .filter(|h| {
+                    if let Some(ref os) = h.os_classification {
+                        os.os_family.contains(filter_str)
+                    } else {
+                        false
+                    }
+                })
+                .collect::<Vec<_>>()
+        } else {
+            discovered_hosts
+        };
+
+        // Convert discovered hosts to inventory
+        return Ok(inventory_from_discovered_hosts(&filtered_hosts, default_user));
+    }
+
+    // 2. CLI --hosts flag
+    if let Some(hosts_str) = cli_hosts {
+        return Ok(Inventory::from_cli_hosts(hosts_str, default_user));
+    }
+
+    // 3. Inventory file
+    if let Some(path) = inventory_path {
+        return Inventory::from_file(path);
+    }
+
+    // 4. Playbook-embedded hosts (HostPattern::Inline)
+    if let HostPattern::Inline(ref inline_hosts) = playbook.hosts {
+        return Ok(Inventory::from_inline_hosts(inline_hosts, default_user));
+    }
+
+    // 5. Implicit localhost (when playbook has hosts: localhost)
+    if let HostPattern::Localhost = playbook.hosts {
+        return Ok(Inventory::localhost_only());
+    }
+
+    // 6. Error - no inventory source available
+    Err(NexusError::Runtime {
+        function: None,
+        message: "No inventory source provided".to_string(),
+        suggestion: Some(
+            "Use --discover to scan a subnet, --inventory/-i to specify an inventory file, \
+             --hosts/-H for a comma-separated host list, or define hosts inline in your playbook".to_string()
+        ),
+    })
+}
+
+/// Convert discovered hosts to an Inventory
+fn inventory_from_discovered_hosts(
+    discovered: &[DiscoveredHost],
+    default_user: Option<&str>,
+) -> Inventory {
+    use nexus::inventory::Host;
+
+    let mut inventory = Inventory::new();
+
+    for dhost in discovered {
+        let addr_str = dhost.address.to_string();
+        let mut host = Host::new(&addr_str);
+
+        // Use hostname if available, otherwise use IP
+        if let Some(ref hostname) = dhost.hostname {
+            host.name = hostname.clone();
+        }
+
+        host.address = addr_str;
+
+        // Find SSH port from open ports
+        if let Some(ssh_port) = dhost.open_ports.iter().find(|p| p.port == 22) {
+            host.port = ssh_port.port;
+        }
+
+        // Set user if provided
+        if let Some(user) = default_user {
+            host.user = user.to_string();
+        }
+
+        // Add OS classification as a variable if available
+        if let Some(ref os) = dhost.os_classification {
+            host.vars.insert("discovered_os".to_string(),
+                nexus::parser::ast::Value::String(os.os_family.clone()));
+            if let Some(ref dist) = os.distribution {
+                host.vars.insert("discovered_distribution".to_string(),
+                    nexus::parser::ast::Value::String(dist.clone()));
+            }
+        }
+
+        inventory.add_host(host);
+    }
+
+    inventory
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_playbook(
     playbook_path: PathBuf,
-    inventory_path: PathBuf,
+    inventory_path: Option<PathBuf>,
+    cli_hosts: Option<String>,
+    discover_subnet: Option<String>,
+    discover_filter: Option<String>,
     _limit: Option<String>,
     check: bool,
     diff: bool,
@@ -488,8 +825,15 @@ async fn run_playbook(
         parse_playbook_file(&playbook_path)?
     };
 
-    // Load inventory
-    let inventory = Inventory::from_file(&inventory_path)?;
+    // Resolve inventory from various sources
+    let inventory = resolve_inventory(
+        inventory_path.as_deref(),
+        cli_hosts.as_deref(),
+        discover_subnet.as_deref(),
+        discover_filter.as_deref(),
+        &playbook,
+        user.as_deref(),
+    ).await?;
 
     // Create output handler (silent when TUI is active to avoid conflicting output)
     let output = if use_tui {
@@ -1014,7 +1358,8 @@ fn handle_checkpoint_command(action: CheckpointAction) -> Result<(), NexusError>
 #[allow(clippy::too_many_arguments)]
 async fn handle_plan_command(
     playbook_path: PathBuf,
-    inventory_path: PathBuf,
+    inventory_path: Option<PathBuf>,
+    cli_hosts: Option<String>,
     limit: Option<String>,
     user: Option<String>,
     password: Option<String>,
@@ -1051,8 +1396,15 @@ async fn handle_plan_command(
         parse_playbook_file(&playbook_path)?
     };
 
-    // Load inventory
-    let inventory = Inventory::from_file(&inventory_path)?;
+    // Resolve inventory from various sources
+    let inventory = resolve_inventory(
+        inventory_path.as_deref(),
+        cli_hosts.as_deref(),
+        None,  // discover_subnet not supported in plan command
+        None,  // discover_filter not supported in plan command
+        &playbook,
+        user.as_deref(),
+    ).await?;
 
     if verbose {
         println!(
@@ -1131,6 +1483,653 @@ async fn handle_plan_command(
     if recap.has_failures() {
         std::process::exit(2);
     }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_discover_command(
+    subnet: Option<String>,
+    subnets_from: Option<PathBuf>,
+    _passive: bool,
+    _from_arp: bool,
+    probe: String,
+    _profile: Option<PathBuf>,
+    fingerprint: bool,
+    save_to: Option<PathBuf>,
+    filter: Option<String>,
+    _via: Option<String>,
+    timeout: u64,
+    parallel: usize,
+    daemon: bool,
+    watch: Option<String>,
+    interval: String,
+    notify_on_change: Option<String>,
+) -> Result<(), NexusError> {
+    // Validate inputs - requires either --subnet or --subnets-from or daemon mode
+    if subnet.is_none() && subnets_from.is_none() && !daemon {
+        return Err(NexusError::Runtime {
+            function: None,
+            message: "No subnet specified".to_string(),
+            suggestion: Some("Use --subnet, --subnets-from, or --daemon with --watch".to_string()),
+        });
+    }
+
+    // Collect subnets to scan
+    let mut subnets = Vec::new();
+
+    if let Some(subnet_str) = subnet {
+        subnets.push(subnet_str);
+    }
+
+    if let Some(file_path) = subnets_from {
+        let content = std::fs::read_to_string(&file_path)
+            .map_err(|e| NexusError::Io {
+                message: format!("Failed to read subnets file: {}", e),
+                path: Some(file_path.clone()),
+            })?;
+
+        for line in content.lines() {
+            let line = line.trim();
+            if !line.is_empty() && !line.starts_with('#') {
+                subnets.push(line.to_string());
+            }
+        }
+    }
+
+    // Handle daemon mode
+    if daemon {
+        println!("{}", "Starting discovery daemon...".green());
+
+        // Use watch subnets if provided, otherwise use scanned subnets
+        let watch_subnets = if let Some(watch_str) = watch {
+            watch_str.split(',').map(|s| s.trim().to_string()).collect()
+        } else {
+            subnets.clone()
+        };
+
+        if watch_subnets.is_empty() {
+            return Err(NexusError::Runtime {
+                function: None,
+                message: "No subnets to watch in daemon mode".to_string(),
+                suggestion: Some("Use --watch or --subnet to specify subnets".to_string()),
+            });
+        }
+
+        // Parse interval
+        let interval_duration = parse_interval(&interval)?;
+
+        // Create daemon
+        let mut daemon = DiscoveryDaemon::new(
+            watch_subnets,
+            interval_duration,
+        );
+
+        // Add notifier if specified
+        if let Some(notify_spec) = notify_on_change {
+            let notifier = parse_notifier(&notify_spec)?;
+            daemon = daemon.with_notifier(notifier);
+        }
+
+        daemon.run().await;
+    }
+
+    // Normal discovery mode (non-daemon)
+    println!("{}", "Starting network discovery...".cyan());
+
+    // Parse probe type
+    let probe_type = parse_probe_type(&probe)?;
+
+    // Create scanner
+    let scanner = NetworkScanner {
+        timeout: Duration::from_millis(timeout),
+        concurrent_probes: parallel,
+        fingerprint,
+        probe_type,
+    };
+
+    // Scan subnets
+    let mut all_hosts = Vec::new();
+
+    for subnet_str in &subnets {
+        println!("  {} Scanning {}...", "→".cyan(), subnet_str);
+
+        let hosts = scanner.scan_subnet(subnet_str).await?;
+
+        println!("    {} Found {} host(s)", "✓".green(), hosts.len());
+        all_hosts.extend(hosts);
+    }
+
+    // Apply filter if specified
+    let filtered_hosts = if let Some(filter_expr) = filter {
+        apply_filter(&all_hosts, &filter_expr)?
+    } else {
+        all_hosts
+    };
+
+    // Print results
+    println!();
+    println!("{} {} host(s) discovered", "Results:".green().bold(), filtered_hosts.len());
+    println!();
+
+    for host in &filtered_hosts {
+        println!("  {} {}", "•".cyan(), host.address.to_string().white().bold());
+
+        if let Some(hostname) = &host.hostname {
+            println!("    {} {}", "Hostname:".dimmed(), hostname);
+        }
+
+        if !host.open_ports.is_empty() {
+            let ports: Vec<String> = host.open_ports.iter()
+                .map(|p| {
+                    if let Some(ref service) = p.service {
+                        format!("{}/{}", p.port, service)
+                    } else {
+                        p.port.to_string()
+                    }
+                })
+                .collect();
+            println!("    {} {}", "Ports:".dimmed(), ports.join(", "));
+        }
+
+        if let Some(os) = &host.os_classification {
+            let os_str = if let Some(ref dist) = os.distribution {
+                format!("{} ({}) - {}% confident", os.os_family, dist, (os.confidence * 100.0) as u8)
+            } else {
+                format!("{} - {}% confident", os.os_family, (os.confidence * 100.0) as u8)
+            };
+            println!("    {} {}", "OS:".dimmed(), os_str);
+        }
+
+        if host.open_ports.iter().any(|p| p.port == 22) {
+            println!("    {} {}", "SSH:".dimmed(), "accessible".green());
+        }
+
+        println!();
+    }
+
+    // Save to inventory if requested
+    if let Some(output_path) = save_to {
+        println!("{} Saving to inventory file...", "→".cyan());
+
+        let inventory = convert_to_inventory(&filtered_hosts);
+        save_inventory_to_file(&inventory, &output_path)?;
+
+        println!("  {} Saved to {}", "✓".green(), output_path.display());
+    }
+
+    Ok(())
+}
+
+/// Parse interval string (e.g., "5m", "1h", "30s") into Duration
+fn parse_interval(interval: &str) -> Result<Duration, NexusError> {
+    let interval = interval.trim();
+
+    if interval.is_empty() {
+        return Err(NexusError::Runtime {
+            function: None,
+            message: "Empty interval".to_string(),
+            suggestion: Some("Use format like '5m', '1h', or '30s'".to_string()),
+        });
+    }
+
+    let (num_str, unit) = if let Some(pos) = interval.find(|c: char| !c.is_ascii_digit()) {
+        (&interval[..pos], &interval[pos..])
+    } else {
+        (interval, "s") // Default to seconds
+    };
+
+    let num: u64 = num_str.parse()
+        .map_err(|_| NexusError::Runtime {
+            function: None,
+            message: format!("Invalid interval number: {}", num_str),
+            suggestion: Some("Use a positive integer".to_string()),
+        })?;
+
+    let multiplier = match unit.trim() {
+        "s" | "sec" | "second" | "seconds" => 1,
+        "m" | "min" | "minute" | "minutes" => 60,
+        "h" | "hour" | "hours" => 3600,
+        "d" | "day" | "days" => 86400,
+        _ => {
+            return Err(NexusError::Runtime {
+                function: None,
+                message: format!("Unknown time unit: {}", unit),
+                suggestion: Some("Use s, m, h, or d".to_string()),
+            });
+        }
+    };
+
+    Ok(Duration::from_secs(num * multiplier))
+}
+
+/// Parse notifier specification
+fn parse_notifier(spec: &str) -> Result<Notifier, NexusError> {
+    if let Some(url) = spec.strip_prefix("webhook:") {
+        Ok(Notifier::Webhook { url: url.to_string() })
+    } else if let Some(path) = spec.strip_prefix("file:") {
+        Ok(Notifier::File { path: PathBuf::from(path) })
+    } else if spec == "stdout" {
+        Ok(Notifier::Stdout)
+    } else {
+        Err(NexusError::Runtime {
+            function: None,
+            message: format!("Invalid notifier specification: {}", spec),
+            suggestion: Some("Use webhook:URL, file:PATH, or stdout".to_string()),
+        })
+    }
+}
+
+/// Parse probe type specification (ssh, ping, or tcp:port1,port2)
+fn parse_probe_type(probe: &str) -> Result<ProbeType, NexusError> {
+    let probe = probe.trim().to_lowercase();
+
+    match probe.as_str() {
+        "ssh" => Ok(ProbeType::Ssh),
+        "ping" => Ok(ProbeType::Ping),
+        _ if probe.starts_with("tcp:") => {
+            let ports_str = &probe[4..];
+            let ports: Result<Vec<u16>, _> = ports_str
+                .split(',')
+                .map(|s| s.trim().parse::<u16>())
+                .collect();
+
+            match ports {
+                Ok(ports) if !ports.is_empty() => Ok(ProbeType::TcpPorts(ports)),
+                Ok(_) => Err(NexusError::Runtime {
+                    function: None,
+                    message: "No ports specified".to_string(),
+                    suggestion: Some("Use format like 'tcp:22,80,443'".to_string()),
+                }),
+                Err(_) => Err(NexusError::Runtime {
+                    function: None,
+                    message: format!("Invalid port in probe specification: {}", ports_str),
+                    suggestion: Some("Ports must be numbers between 1 and 65535".to_string()),
+                }),
+            }
+        }
+        _ => Err(NexusError::Runtime {
+            function: None,
+            message: format!("Unknown probe type: {}", probe),
+            suggestion: Some("Use 'ssh', 'ping', or 'tcp:port1,port2'".to_string()),
+        }),
+    }
+}
+
+/// Apply filter expression to hosts
+fn apply_filter(hosts: &[DiscoveredHost], filter_expr: &str) -> Result<Vec<DiscoveredHost>, NexusError> {
+    let mut filtered = Vec::new();
+
+    for host in hosts {
+        if matches_filter(host, filter_expr) {
+            filtered.push(host.clone());
+        }
+    }
+
+    Ok(filtered)
+}
+
+/// Check if host matches filter expression
+fn matches_filter(host: &DiscoveredHost, filter_expr: &str) -> bool {
+    // Simple filter implementation
+    // Supports: "port:22", "os:linux", "ssh:true", "port:22 AND os:linux"
+
+    for condition in filter_expr.split("AND") {
+        let condition = condition.trim();
+
+        if let Some(port_str) = condition.strip_prefix("port:") {
+            if let Ok(port) = port_str.trim().parse::<u16>() {
+                if !host.open_ports.iter().any(|p| p.port == port) {
+                    return false;
+                }
+            }
+        } else if let Some(os_str) = condition.strip_prefix("os:") {
+            let os_str = os_str.trim().to_lowercase();
+            if let Some(ref os_info) = host.os_classification {
+                if !os_info.os_family.to_lowercase().contains(&os_str) {
+                    if let Some(ref dist) = os_info.distribution {
+                        if !dist.to_lowercase().contains(&os_str) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            } else {
+                return false;
+            }
+        } else if condition.starts_with("ssh:") {
+            let ssh_str = condition.strip_prefix("ssh:").unwrap().trim();
+            let ssh_required = ssh_str == "true" || ssh_str == "yes";
+            if ssh_required && !host.open_ports.iter().any(|p| p.port == 22) {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Convert discovered hosts to inventory
+fn convert_to_inventory(hosts: &[DiscoveredHost]) -> Inventory {
+    let mut inventory = Inventory::new();
+
+    for discovered in hosts {
+        let name = discovered.hostname.clone()
+            .unwrap_or_else(|| discovered.address.to_string());
+
+        let mut host = Host::new(name.clone())
+            .with_address(discovered.address.to_string());
+
+        // Set SSH port if available
+        if let Some(ssh_port) = discovered.open_ports.iter().find(|p| p.port == 22) {
+            host.port = ssh_port.port;
+        }
+
+        // Add discovered metadata as variables
+        if let Some(ref os) = discovered.os_classification {
+            host.vars.insert(
+                "discovered_os_family".to_string(),
+                Value::String(os.os_family.clone())
+            );
+            if let Some(ref dist) = os.distribution {
+                host.vars.insert(
+                    "discovered_os_dist".to_string(),
+                    Value::String(dist.clone())
+                );
+            }
+            host.vars.insert(
+                "discovered_os_confidence".to_string(),
+                Value::String(format!("{:.2}", os.confidence))
+            );
+        }
+
+        if !discovered.open_ports.is_empty() {
+            let ports_str = discovered.open_ports.iter()
+                .map(|p| p.port.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            host.vars.insert("discovered_open_ports".to_string(), Value::String(ports_str));
+        }
+
+        host.groups.push("discovered".to_string());
+
+        inventory.add_host(host);
+    }
+
+    // Create "discovered" group
+    let discovered_group = HostGroup {
+        name: "discovered".to_string(),
+        hosts: hosts.iter()
+            .map(|h| h.hostname.clone().unwrap_or_else(|| h.address.to_string()))
+            .collect(),
+        children: Vec::new(),
+        vars: std::collections::HashMap::new(),
+    };
+    inventory.add_group(discovered_group);
+
+    inventory
+}
+
+/// Save inventory to YAML file
+fn save_inventory_to_file(inventory: &Inventory, path: &Path) -> Result<(), NexusError> {
+    use std::collections::HashMap;
+
+    let mut yaml_map: HashMap<String, serde_yaml::Value> = HashMap::new();
+
+    // Add hosts to "all" group
+    let mut all_hosts = HashMap::new();
+    for host in inventory.hosts.values() {
+        let mut host_map = HashMap::new();
+        host_map.insert("ansible_host".to_string(), serde_yaml::Value::String(host.address.clone()));
+        host_map.insert("ansible_port".to_string(), serde_yaml::Value::Number(host.port.into()));
+
+        if !host.user.is_empty() {
+            host_map.insert("ansible_user".to_string(), serde_yaml::Value::String(host.user.clone()));
+        }
+
+        // Add custom vars
+        for (key, val) in &host.vars {
+            let yaml_val = match val {
+                Value::String(s) => serde_yaml::Value::String(s.clone()),
+                Value::Int(n) => serde_yaml::Value::Number((*n).into()),
+                Value::Float(f) => serde_yaml::Value::String(f.to_string()),
+                Value::Bool(b) => serde_yaml::Value::Bool(*b),
+                Value::List(l) => serde_yaml::Value::String(format!("{:?}", l)),
+                Value::Dict(_) | Value::Null => serde_yaml::Value::String(format!("{:?}", val)),
+            };
+            host_map.insert(key.clone(), yaml_val);
+        }
+
+        all_hosts.insert(host.name.clone(), serde_yaml::Value::Mapping(
+            host_map.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
+        ));
+    }
+
+    let mut all_group = HashMap::new();
+    all_group.insert("hosts".to_string(), serde_yaml::Value::Mapping(
+        all_hosts.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
+    ));
+
+    yaml_map.insert("all".to_string(), serde_yaml::Value::Mapping(
+        all_group.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
+    ));
+
+    // Write to file
+    let yaml_string = serde_yaml::to_string(&yaml_map)
+        .map_err(|e| NexusError::Runtime {
+            function: None,
+            message: format!("Failed to serialize inventory: {}", e),
+            suggestion: None,
+        })?;
+
+    std::fs::write(path, yaml_string)
+        .map_err(|e| NexusError::Io {
+            message: format!("Failed to write inventory file: {}", e),
+            path: Some(path.to_path_buf()),
+        })?;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_convert_command(
+    source: PathBuf,
+    output: Option<PathBuf>,
+    dry_run: bool,
+    interactive: bool,
+    all: bool,
+    include_inventory: bool,
+    include_templates: bool,
+    keep_jinja2: bool,
+    report_path: Option<PathBuf>,
+    strict: bool,
+    quiet: bool,
+    verbose: bool,
+    assess: bool,
+) -> Result<(), NexusError> {
+    // Print banner unless in quiet mode
+    if !quiet {
+        println!();
+        println!("{}", "Nexus Ansible Converter".cyan().bold());
+        println!();
+    }
+
+    // Validate source path exists
+    if !source.exists() {
+        return Err(NexusError::Runtime {
+            function: None,
+            message: format!("Source path does not exist: {}", source.display()),
+            suggestion: Some("Verify the path to the Ansible playbook or project directory".to_string()),
+        });
+    }
+
+    // Create conversion options
+    let options = ConversionOptions {
+        dry_run,
+        interactive,
+        convert_all: all,
+        include_inventory,
+        include_templates,
+        keep_jinja2,
+        strict,
+        verbose,
+        quiet,
+    };
+
+    // Create converter instance
+    let converter = Converter::new(options);
+
+    // Run assessment or conversion
+    let report = if assess {
+        if !quiet {
+            println!("{} Analyzing Ansible project...", "Assessment:".cyan());
+            println!();
+        }
+        converter.assess(&source)?
+    } else {
+        if !quiet {
+            if dry_run {
+                println!("{} Running in dry-run mode (no files will be written)", "Dry Run:".yellow());
+            } else {
+                println!("{} Converting Ansible to Nexus format...", "Converting:".cyan());
+            }
+            println!();
+        }
+        converter.convert(&source, output.as_deref())?
+    };
+
+    // Print summary unless in quiet mode
+    if !quiet {
+        print_conversion_summary(&report, assess);
+    }
+
+    // Write detailed report to file if requested
+    if let Some(report_file) = report_path {
+        write_conversion_report(&report, &report_file)?;
+        if !quiet {
+            println!();
+            println!("  {} Detailed report written to {}", "✓".green(), report_file.display());
+        }
+    }
+
+    // Handle strict mode - exit with error if there were warnings
+    if strict && report.has_warnings() {
+        println!();
+        println!("{}", "Conversion failed: warnings detected in strict mode".red());
+        std::process::exit(1);
+    }
+
+    // Exit with error code if there were errors
+    if report.has_errors() {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Print conversion summary
+fn print_conversion_summary(report: &ConversionReport, assess_only: bool) {
+    println!();
+    println!("{}", "Conversion Summary:".green().bold());
+    println!();
+
+    if assess_only {
+        println!("  {} Files analyzed: {}", "•".cyan(), report.files.len());
+        println!("  {} Playbooks found: {}", "•".cyan(), report.total_playbooks);
+        println!("  {} Roles found: {}", "•".cyan(), report.total_roles);
+        println!("  {} Tasks total: {}", "•".cyan(), report.total_tasks);
+    } else {
+        println!("  {} Files converted: {}", "✓".green(), report.files.len());
+        println!("  {} Tasks converted: {}", "✓".green(), report.total_converted());
+        let need_review = report.total_need_review();
+        if need_review > 0 {
+            println!("  {} Tasks need review: {}", "⚠".yellow(), need_review);
+        }
+    }
+
+    let warning_count: usize = report.files.iter()
+        .map(|f| f.issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Warning)).count())
+        .sum();
+    let error_count: usize = report.files.iter()
+        .map(|f| f.issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Error)).count())
+        .sum();
+
+    if warning_count > 0 {
+        println!("  {} Warnings: {}", "⚠".yellow(), warning_count);
+    }
+
+    if error_count > 0 {
+        println!("  {} Errors: {}", "✗".red(), error_count);
+    }
+
+    // Print detailed warnings and errors if any
+    let warnings: Vec<_> = report.files.iter()
+        .flat_map(|f| f.issues.iter())
+        .filter(|i| matches!(i.severity, IssueSeverity::Warning))
+        .collect();
+
+    if !warnings.is_empty() && warnings.len() <= 10 {
+        println!();
+        println!("{}:", "Warnings".yellow().bold());
+        for issue in warnings {
+            println!("  {} {}", "⚠".yellow(), issue.message);
+        }
+    } else if warnings.len() > 10 {
+        println!();
+        println!("{}: {} total (showing first 10)", "Warnings".yellow().bold(), warnings.len());
+        for issue in warnings.iter().take(10) {
+            println!("  {} {}", "⚠".yellow(), issue.message);
+        }
+    }
+
+    let errors: Vec<_> = report.files.iter()
+        .flat_map(|f| f.issues.iter())
+        .filter(|i| matches!(i.severity, IssueSeverity::Error))
+        .collect();
+
+    if !errors.is_empty() && errors.len() <= 10 {
+        println!();
+        println!("{}:", "Errors".red().bold());
+        for issue in errors {
+            println!("  {} {}", "✗".red(), issue.message);
+        }
+    } else if errors.len() > 10 {
+        println!();
+        println!("{}: {} total (showing first 10)", "Errors".red().bold(), errors.len());
+        for issue in errors.iter().take(10) {
+            println!("  {} {}", "✗".red(), issue.message);
+        }
+    }
+
+    // Print unsupported modules if any
+    let unsupported_modules = report.all_unsupported_modules();
+    if !unsupported_modules.is_empty() {
+        println!();
+        println!("{}:", "Unsupported Modules".cyan().bold());
+        for module in &unsupported_modules {
+            println!("  {} {}", "ℹ".cyan(), module);
+        }
+    }
+}
+
+/// Write detailed conversion report to file
+fn write_conversion_report(report: &ConversionReport, path: &Path) -> Result<(), NexusError> {
+    use std::io::Write;
+
+    let markdown = report.to_markdown();
+
+    let mut file = std::fs::File::create(path)
+        .map_err(|e| NexusError::Io {
+            message: format!("Failed to create report file: {}", e),
+            path: Some(path.to_path_buf()),
+        })?;
+
+    file.write_all(markdown.as_bytes())
+        .map_err(|e| NexusError::Io {
+            message: format!("Failed to write report: {}", e),
+            path: Some(path.to_path_buf()),
+        })?;
 
     Ok(())
 }

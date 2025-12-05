@@ -3,8 +3,8 @@
 **/*.rs.bk
 *.pdb
 
-# Cargo
-Cargo.lock
+# Cargo (keep Cargo.lock for binaries)
+# Cargo.lock - KEPT for reproducible builds
 
 # IDE and editor files
 .idea/

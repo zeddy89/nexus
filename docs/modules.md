@@ -4,7 +4,7 @@ Nexus includes built-in modules for common infrastructure tasks. All modules sup
 
 ## Command Module
 
-Execute shell commands on remote hosts.
+Execute commands on remote hosts without shell interpretation. Commands are executed directly, which is more secure but doesn't support shell features.
 
 ```yaml
 - name: Run a command
@@ -30,6 +30,87 @@ Execute shell commands on remote hosts.
 - `stdout`: Command output
 - `stderr`: Error output
 - `exit_code`: Exit code (0 = success)
+
+**Note:** The `command:` module executes commands directly without shell interpretation. This means shell features like pipes (`|`), redirects (`>`), variable expansion (`$VAR`), and command substitution (`$(cmd)`) will NOT work. If you need these features, use the `shell:` module instead. See the Shell module section below for details.
+
+## Shell Module
+
+Execute commands through a shell (`/bin/sh -c`), enabling shell features like variable expansion, pipes, and redirects.
+
+```yaml
+- name: Show current user
+  shell: echo "Hello, $USER"
+
+- name: Count nginx processes
+  shell: ps aux | grep nginx | wc -l
+  register: nginx_count
+
+- name: Save system info
+  shell: uname -a > /tmp/sysinfo.txt
+
+- name: Command substitution
+  shell: echo "Current date is $(date +%Y-%m-%d)"
+
+- name: List log files in specific directory
+  shell: ls -la *.log
+  chdir: /var/log
+
+- name: Download file only if not exists
+  shell: curl -o /tmp/data.json https://api.example.com/data
+  creates: /tmp/data.json
+```
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `shell` | string | Shell command to execute (required) |
+| `chdir` | string | Change to this directory before executing |
+| `creates` | string | Skip if this file/directory exists |
+| `removes` | string | Skip if this file/directory doesn't exist |
+
+**Returns:**
+- `stdout`: Command output
+- `stderr`: Error output
+- `exit_code`: Exit code (0 = success)
+
+**When to Use Shell vs Command:**
+
+| Use `command:` when... | Use `shell:` when... |
+|------------------------|----------------------|
+| Running simple commands | You need environment variables ($USER, $HOME) |
+| Security is a concern (no shell injection) | You need pipes (`cmd1 \| cmd2`) |
+| You don't need shell features | You need redirects (`> file`, `>> file`) |
+| Command has no special characters | You need command substitution (`$(cmd)`) |
+
+**Examples:**
+
+```yaml
+# Variable expansion (works with shell:, NOT with command:)
+- shell: echo $HOME
+  # Output: /home/username
+
+- command: echo $HOME
+  # Output: $HOME (literal)
+
+# Pipes (work with shell:, NOT with command:)
+- shell: cat /etc/passwd | grep root
+  # Works!
+
+- command: cat /etc/passwd | grep root
+  # Fails - tries to run "cat" with literal "|" as argument
+
+# Complex shell scripts
+- name: Backup with timestamp
+  shell: |
+    BACKUP_DIR="/backups/$(date +%Y%m%d)"
+    mkdir -p $BACKUP_DIR
+    cp -r /var/www/* $BACKUP_DIR/
+    echo "Backup completed to $BACKUP_DIR"
+```
+
+**Security Considerations:**
+
+The `shell:` module passes commands through `/bin/sh -c`, which means shell metacharacters are interpreted. Be careful with user-provided input to avoid shell injection. Use `command:` when you don't need shell features.
 
 ## Package Module
 

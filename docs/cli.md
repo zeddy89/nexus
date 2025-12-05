@@ -17,6 +17,16 @@ Options:
 
 ## Commands
 
+- [nexus run](#nexus-run) - Execute a playbook
+- [nexus validate](#nexus-validate) - Validate playbook syntax
+- [nexus plan](#nexus-plan) - Preview changes before applying
+- [nexus parse](#nexus-parse) - Display parsed playbook structure
+- [nexus inventory](#nexus-inventory) - List hosts in inventory
+- [nexus vault](#nexus-vault) - Manage encrypted secrets
+- [nexus checkpoint](#nexus-checkpoint) - Manage execution checkpoints
+- [nexus convert](#nexus-convert) - Convert Ansible playbooks to Nexus format
+- [nexus discover](#nexus-discover) - Discover hosts on the network
+
 ### nexus run
 
 Execute a playbook.
@@ -27,8 +37,10 @@ nexus run <PLAYBOOK> [OPTIONS]
 Arguments:
   <PLAYBOOK>  Path to the playbook file
 
-Required Options:
+Inventory Options (one or none required):
   -i, --inventory <FILE>  Path to inventory file
+  -H, --hosts <HOSTS>     Comma-separated host list (IPs or hostnames)
+      --discover <SUBNET> Discover hosts via network scan (CIDR notation)
 
 Connection Options:
   -u, --user <USER>           SSH user (overrides inventory)
@@ -54,6 +66,12 @@ Vault Options:
       --vault-password-file <FILE> File containing vault password
       --ask-vault-pass             Prompt for vault password
 
+Discovery Options (when using --discover):
+      --probe <TYPE>          Probe type: ssh, ping, or tcp:port1,port2 [default: ssh]
+      --fingerprint           Enable OS and service fingerprinting
+      --timeout <DURATION>    Connection timeout per host [default: 2s]
+      --parallel <N>          Max concurrent probe connections [default: 100]
+
 Advanced Options:
       --checkpoint            Enable checkpoints for resume
       --resume                Resume from last checkpoint
@@ -65,8 +83,17 @@ Advanced Options:
 **Examples:**
 
 ```bash
-# Basic execution
+# Basic execution with inventory
 nexus run site.yml -i inventory.yaml
+
+# Inventory-less: explicit host list
+nexus run site.yml --hosts 192.168.1.10,192.168.1.11
+
+# Inventory-less: network discovery
+nexus run site.yml --discover 192.168.1.0/24
+
+# Discovery with custom probe
+nexus run site.yml --discover 192.168.1.0/24 --probe tcp:22,80 --timeout 5s
 
 # With SSH key and verbose output
 nexus run site.yml -i inventory.yaml --private-key ~/.ssh/id_ed25519 -v
@@ -282,6 +309,144 @@ nexus checkpoint clean --older-than 7
 
 # Clean specific playbook checkpoint
 nexus checkpoint clean site.yml
+```
+
+### nexus convert
+
+Convert Ansible playbooks and roles to Nexus format.
+
+#### Synopsis
+
+```bash
+nexus convert <source> [options]
+```
+
+#### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `<source>` | Ansible playbook file or directory to convert |
+
+#### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <path>` | Output file or directory |
+| `--dry-run` | Preview conversion without writing files |
+| `--interactive` | Approve each file conversion |
+| `--all` | Convert entire project (playbooks, roles, inventory) |
+| `--include-inventory` | Also convert inventory files |
+| `--include-templates` | Convert Jinja2 templates to Nexus syntax |
+| `--keep-jinja2` | Keep Jinja2 syntax in templates |
+| `--report <file>` | Write detailed conversion report to file |
+| `--strict` | Fail on any conversion warning |
+| `--assess` | Assessment mode - analyze without converting |
+| `-q, --quiet` | Minimal output |
+| `-v, --verbose` | Detailed conversion log |
+
+#### Examples
+
+```bash
+# Convert single playbook
+nexus convert site.yml -o site.nx.yml
+
+# Dry run to preview changes
+nexus convert playbook.yml --dry-run
+
+# Convert entire Ansible project
+nexus convert ~/ansible/ -o ~/nexus/ --all
+
+# Convert with detailed report
+nexus convert site.yml -o site.nx.yml --report conversion-report.md
+
+# Assessment mode (analyze without converting)
+nexus convert ansible-project/ --assess
+
+# Strict mode for CI/CD
+nexus convert playbooks/ -o nexus/ --strict --quiet
+```
+
+#### Conversion Mappings
+
+The converter automatically translates:
+
+| Ansible | Nexus |
+|---------|-------|
+| `{{ variable }}` | `${variable}` |
+| `{{ var \| default('x') }}` | `${var ?? 'x'}` |
+| `yum/apt/dnf` | `package:` |
+| `service/systemd` | `service:` |
+| `copy` | `file: copy` |
+| `template` | `file: template` |
+| `debug` | `log:` |
+| `shell` | `shell:` |
+| `command` | `command:` |
+
+#### See Also
+
+- [Ansible Migration Guide](ansible-migration.md) for complete conversion documentation
+
+### nexus discover
+
+Discover hosts on the network via scanning.
+
+```bash
+nexus discover [OPTIONS]
+
+Required Options:
+  --subnet <CIDR>  Subnet to scan (e.g., 192.168.1.0/24)
+
+Probe Options:
+  --probe <TYPE>          Probe type: ssh, ping, or tcp:port1,port2 [default: ssh]
+  --fingerprint           Enable OS and service fingerprinting
+  --timeout <DURATION>    Connection timeout per host [default: 2s]
+  --parallel <N>          Max concurrent probe connections [default: 100]
+
+Output Options:
+  --save-to <FILE>        Save discovered hosts to inventory file
+
+Daemon Options:
+  --daemon                Run as continuous monitoring daemon
+  --watch <SUBNETS>       Comma-separated subnets to watch in daemon mode
+  --interval <DURATION>   Scan interval for daemon mode [default: 5m]
+  --notify-on-change <SPEC>  Notification method: webhook:URL, file:PATH, or stdout
+```
+
+**Examples:**
+
+```bash
+# Basic subnet scan
+nexus discover --subnet 192.168.1.0/24
+
+# Scan with ping probe
+nexus discover --subnet 192.168.1.0/24 --probe ping
+
+# Scan specific TCP ports
+nexus discover --subnet 192.168.1.0/24 --probe tcp:22,80,443
+
+# Enable OS fingerprinting
+nexus discover --subnet 192.168.1.0/24 --fingerprint
+
+# Save to inventory file
+nexus discover --subnet 192.168.1.0/24 --save-to inventory.yaml
+
+# Fast scan (aggressive)
+nexus discover --subnet 10.0.0.0/16 --timeout 500ms --parallel 200
+
+# Continuous monitoring daemon
+nexus discover --daemon --watch 192.168.1.0/24,10.0.0.0/24 --interval 5m
+
+# Daemon with webhook notifications
+nexus discover --daemon \
+  --watch 192.168.1.0/24 \
+  --interval 10m \
+  --notify-on-change webhook:https://alerts.example.com/network
+
+# Daemon with file logging
+nexus discover --daemon \
+  --watch 192.168.1.0/24 \
+  --interval 5m \
+  --notify-on-change file:/var/log/nexus-discovery.log
 ```
 
 ## Exit Codes

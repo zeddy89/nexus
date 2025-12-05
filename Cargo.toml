@@ -50,6 +50,7 @@ similar = "2.3"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
+dns-lookup = "2"
 
 # Vault/Encryption
 aes-gcm = "0.10"

@@ -14,7 +14,7 @@ use crate::output::errors::{NexusError, ParseError, ParseErrorKind};
 /// Raw YAML playbook structure (before AST conversion)
 #[derive(Debug, Deserialize)]
 struct RawPlaybook {
-    hosts: Option<String>,
+    hosts: Option<RawHostsValue>,
     vars: Option<HashMap<String, YamlValue>>,
     tasks: Option<Vec<RawTask>>,
     handlers: Option<Vec<RawHandler>>,
@@ -39,6 +39,32 @@ struct RawPlaybook {
     throttle: Option<usize>,
     /// Execution strategy
     strategy: Option<String>,
+}
+
+/// Hosts value can be either a string pattern or a list of inline hosts
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RawHostsValue {
+    /// String pattern: "all", "webservers", "localhost", "web*:&db"
+    Pattern(String),
+    /// Inline host list: [{name: web1, address: 192.168.1.10}, ...]
+    Inline(Vec<RawInlineHost>),
+}
+
+/// Raw inline host definition from YAML
+#[derive(Debug, Deserialize)]
+struct RawInlineHost {
+    /// Host name/identifier
+    name: String,
+    /// IP address or hostname to connect to
+    address: Option<String>,
+    /// SSH port (default: 22)
+    port: Option<u16>,
+    /// SSH user
+    user: Option<String>,
+    /// Host-specific variables
+    #[serde(default)]
+    vars: HashMap<String, YamlValue>,
 }
 
 /// Serial value can be a number, string (percentage), or list
@@ -266,15 +292,36 @@ pub(crate) fn extract_yaml_error_location(e: &serde_yaml::Error) -> (Option<usiz
     }
 }
 
+/// Convert RawInlineHost to InlineHost
+fn convert_inline_host(raw: RawInlineHost) -> Result<InlineHost, NexusError> {
+    let vars = convert_vars(raw.vars)?;
+
+    Ok(InlineHost {
+        name: raw.name,
+        address: raw.address,
+        port: raw.port,
+        user: raw.user,
+        vars,
+    })
+}
+
 fn convert_playbook(raw: RawPlaybook, source_file: String) -> Result<Playbook, NexusError> {
     let hosts = match raw.hosts {
-        Some(h) if h == "all" => HostPattern::All,
-        Some(h) => {
+        Some(RawHostsValue::Pattern(h)) if h == "all" => HostPattern::All,
+        Some(RawHostsValue::Pattern(h)) if h == "localhost" => HostPattern::Localhost,
+        Some(RawHostsValue::Pattern(h)) => {
             if h.contains(':') || h.contains('&') || h.contains('!') {
                 HostPattern::Pattern(h)
             } else {
                 HostPattern::Group(h)
             }
+        }
+        Some(RawHostsValue::Inline(raw_hosts)) => {
+            let inline_hosts: Result<Vec<_>, _> = raw_hosts
+                .into_iter()
+                .map(convert_inline_host)
+                .collect();
+            HostPattern::Inline(inline_hosts?)
         }
         None => HostPattern::All,
     };
@@ -855,13 +902,17 @@ fn parse_module_call(
         return parse_facts_module(facts_value, module, source_file);
     }
 
+    if let Some(shell_value) = module.get("shell") {
+        return parse_shell_module(shell_value, module, source_file);
+    }
+
     // Unknown module - provide helpful error
     let unknown_key = module_keys[0];
     let _suggestion = suggest_module(unknown_key);
 
     Err(NexusError::Parse(Box::new(ParseError {
         kind: ParseErrorKind::UnknownModule,
-        message: format!("Unknown or unsupported module. Available keys: {:?}", module.keys().collect::<Vec<_>>()),
+        message: format!("Unknown module: {}. Available keys: {:?}", unknown_key, module.keys().collect::<Vec<_>>()),
         file: None,
         line: None,
         column: None,
@@ -870,7 +921,7 @@ fn parse_module_call(
 }
 
 fn suggest_module(name: &str) -> String {
-    let modules = ["package", "service", "file", "command", "user", "template", "facts", "run"];
+    let modules = ["package", "service", "file", "command", "shell", "user", "template", "facts", "run"];
 
     // Simple edit distance for suggestions
     for m in &modules {
@@ -1193,6 +1244,79 @@ fn parse_facts_module(
     Ok(ModuleCall::Facts { categories })
 }
 
+fn parse_shell_module(
+    value: &YamlValue,
+    module: &HashMap<String, YamlValue>,
+    _source_file: &str,
+) -> Result<ModuleCall, NexusError> {
+    // Shell module can be specified as:
+    // 1. shell: "command string"  (simple string)
+    // 2. shell:
+    //      cmd: "command string"
+    //      chdir: /path
+    //      creates: /file
+    //      removes: /file
+
+    // Helper to get parameters from either the value mapping or module mapping
+    let get_param = |key: &str| -> Option<&YamlValue> {
+        if let YamlValue::Mapping(map) = value {
+            map.get(YamlValue::String(key.to_string()))
+        } else {
+            None
+        }.or_else(|| module.get(key))
+    };
+
+    // Extract command - either from value directly or from cmd/command/_raw_params field
+    let command = if let YamlValue::String(_) = value {
+        // Simple string form: shell: "echo hello"
+        yaml_to_expression(value)?
+    } else if let YamlValue::Mapping(_) = value {
+        // Object form - look for cmd, command, or _raw_params
+        get_param("cmd")
+            .or_else(|| get_param("command"))
+            .or_else(|| get_param("_raw_params"))
+            .map(yaml_to_expression)
+            .transpose()?
+            .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::MissingField,
+                message: "shell module requires 'cmd' or 'command' field".to_string(),
+                file: None,
+                line: None,
+                column: None,
+                suggestion: Some("Add cmd: 'your command here'".to_string()),
+            })))?
+    } else {
+        return Err(NexusError::Parse(Box::new(ParseError {
+            kind: ParseErrorKind::InvalidValue,
+            message: "shell module must be a string or object".to_string(),
+            file: None,
+            line: None,
+            column: None,
+            suggestion: Some("Use 'shell: \"command\"' or 'shell: { cmd: \"command\" }'".to_string()),
+        })));
+    };
+
+    // Extract optional parameters
+    let chdir = get_param("chdir")
+        .map(yaml_to_expression)
+        .transpose()?;
+
+    let creates = get_param("creates")
+        .map(yaml_to_expression)
+        .transpose()?;
+
+    let removes = get_param("removes")
+        .map(yaml_to_expression)
+        .transpose()?;
+
+    Ok(ModuleCall::Shell {
+        command,
+        chdir,
+        creates,
+        removes,
+    })
+}
+
 pub(crate) fn yaml_to_expression(value: &YamlValue) -> Result<Expression, NexusError> {
     match value {
         YamlValue::String(s) => {
@@ -1411,6 +1535,9 @@ tasks:
 
         let playbook = parse_playbook(yaml, "test.nx.yaml".to_string()).unwrap();
 
+        // Check that localhost is parsed correctly
+        assert_eq!(playbook.hosts, HostPattern::Localhost);
+
         assert_eq!(playbook.tasks.len(), 1);
 
         if let TaskOrBlock::Block(ref block) = playbook.tasks[0] {
@@ -1490,6 +1617,75 @@ tasks:
         } else {
             panic!("Expected Block, got Task");
         }
+    }
+
+    #[test]
+    fn test_parse_inline_hosts() {
+        let yaml = r#"
+hosts:
+  - name: web1.example.com
+    address: 192.168.1.10
+    port: 22
+    user: admin
+    vars:
+      http_port: 8080
+      role: primary
+  - name: web2.example.com
+    address: 192.168.1.11
+    vars:
+      http_port: 8081
+      role: secondary
+
+tasks:
+  - name: Test task
+    command: echo "hello"
+"#;
+
+        let playbook = parse_playbook(yaml, "test.nx.yaml".to_string()).unwrap();
+
+        // Check that inline hosts are parsed correctly
+        if let HostPattern::Inline(ref hosts) = playbook.hosts {
+            assert_eq!(hosts.len(), 2);
+
+            // Check first host
+            assert_eq!(hosts[0].name, "web1.example.com");
+            assert_eq!(hosts[0].address, Some("192.168.1.10".to_string()));
+            assert_eq!(hosts[0].port, Some(22));
+            assert_eq!(hosts[0].user, Some("admin".to_string()));
+            assert_eq!(hosts[0].vars.len(), 2);
+            assert_eq!(hosts[0].vars.get("http_port").and_then(|v| v.as_i64()), Some(8080));
+            assert_eq!(hosts[0].vars.get("role").and_then(|v| v.as_str()), Some("primary"));
+
+            // Check second host
+            assert_eq!(hosts[1].name, "web2.example.com");
+            assert_eq!(hosts[1].address, Some("192.168.1.11".to_string()));
+            assert_eq!(hosts[1].port, None);
+            assert_eq!(hosts[1].user, None);
+            assert_eq!(hosts[1].vars.len(), 2);
+            assert_eq!(hosts[1].vars.get("http_port").and_then(|v| v.as_i64()), Some(8081));
+            assert_eq!(hosts[1].vars.get("role").and_then(|v| v.as_str()), Some("secondary"));
+        } else {
+            panic!("Expected HostPattern::Inline, got {:?}", playbook.hosts);
+        }
+
+        assert_eq!(playbook.tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_localhost_pattern() {
+        let yaml = r#"
+hosts: localhost
+
+tasks:
+  - name: Local task
+    command: echo "local"
+"#;
+
+        let playbook = parse_playbook(yaml, "test.nx.yaml".to_string()).unwrap();
+
+        // Check that localhost pattern is recognized
+        assert_eq!(playbook.hosts, HostPattern::Localhost);
+        assert_eq!(playbook.tasks.len(), 1);
     }
 }
 

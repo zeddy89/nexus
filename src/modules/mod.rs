@@ -5,6 +5,7 @@ mod command;
 mod file;
 mod package;
 mod service;
+mod shell;
 pub mod template;
 mod user;
 
@@ -13,6 +14,7 @@ pub use command::CommandModule;
 pub use file::FileModule;
 pub use package::PackageModule;
 pub use service::ServiceModule;
+pub use shell::ShellModule;
 pub use template::TemplateEngine;
 pub use user::UserModule;
 
@@ -59,6 +61,7 @@ pub struct ModuleExecutor {
     service: ServiceModule,
     file: FileModule,
     command: CommandModule,
+    shell: ShellModule,
     user: UserModule,
 }
 
@@ -69,6 +72,7 @@ impl ModuleExecutor {
             service: ServiceModule::new(),
             file: FileModule::new(),
             command: CommandModule::new(),
+            shell: ShellModule::new(),
             user: UserModule::new(),
         }
     }
@@ -132,6 +136,22 @@ impl ModuleExecutor {
                     ctx,
                     conn.as_connection(),
                     &cmd_val.to_string(),
+                    creates_val.as_ref().map(|v| v.to_string()),
+                    removes_val.as_ref().map(|v| v.to_string()),
+                ).await
+            }
+
+            ModuleCall::Shell { command, chdir, creates, removes } => {
+                let cmd_val = evaluate_expression(command, ctx)?;
+                let chdir_val = chdir.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let creates_val = creates.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let removes_val = removes.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+
+                self.shell.execute_with_params(
+                    ctx,
+                    conn.as_connection(),
+                    &cmd_val.to_string(),
+                    chdir_val.as_ref().map(|v| v.to_string()),
                     creates_val.as_ref().map(|v| v.to_string()),
                     removes_val.as_ref().map(|v| v.to_string()),
                 ).await

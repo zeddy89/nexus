@@ -3,6 +3,7 @@
 // A modern infrastructure automation tool that fixes Ansible's core problems
 // while keeping its simplicity for basic tasks.
 
+pub mod converter;
 pub mod executor;
 pub mod inventory;
 pub mod modules;

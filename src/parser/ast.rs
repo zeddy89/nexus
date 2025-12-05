@@ -80,7 +80,7 @@ pub enum TaskOrBlock {
 }
 
 /// Host targeting pattern
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[derive(Default)]
 pub enum HostPattern {
     /// All hosts
@@ -90,6 +90,25 @@ pub enum HostPattern {
     Group(String),
     /// Multiple groups with intersection/union
     Pattern(String),
+    /// Inline host list defined in playbook (Nexus differentiator)
+    Inline(Vec<InlineHost>),
+    /// Special pattern for localhost-only execution
+    Localhost,
+}
+
+/// Inline host definition for playbook-embedded hosts
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineHost {
+    /// Host name/identifier
+    pub name: String,
+    /// IP address or hostname to connect to
+    pub address: Option<String>,
+    /// SSH port (default: 22)
+    pub port: Option<u16>,
+    /// SSH user
+    pub user: Option<String>,
+    /// Host-specific variables
+    pub vars: HashMap<String, Value>,
 }
 
 
@@ -356,6 +375,13 @@ pub enum ModuleCall {
     Facts {
         categories: Vec<String>,
     },
+    /// Shell command - execute through /bin/sh -c
+    Shell {
+        command: Expression,
+        chdir: Option<Expression>,
+        creates: Option<Expression>,
+        removes: Option<Expression>,
+    },
 }
 
 impl ModuleCall {
@@ -370,6 +396,7 @@ impl ModuleCall {
             ModuleCall::RunFunction { .. } => "run",
             ModuleCall::Template { .. } => "template",
             ModuleCall::Facts { .. } => "facts",
+            ModuleCall::Shell { .. } => "shell",
         }
     }
 }
