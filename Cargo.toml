@@ -61,6 +61,9 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 zeroize = "1"
 
+# OpenSSL (vendored for cross-compilation)
+openssl = { version = "0.10", features = ["vendored"] }
+
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"
