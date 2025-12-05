@@ -144,9 +144,9 @@ impl VaultFile {
         }
 
         // Decode base64
-        let decoded = BASE64.decode(&encoded_data).map_err(|e| {
-            VaultError::InvalidFormat(format!("Invalid base64 encoding: {}", e))
-        })?;
+        let decoded = BASE64
+            .decode(&encoded_data)
+            .map_err(|e| VaultError::InvalidFormat(format!("Invalid base64 encoding: {}", e)))?;
 
         // Extract salt, nonce, and ciphertext
         // Format: [16 bytes salt][12 bytes nonce][remaining bytes ciphertext]

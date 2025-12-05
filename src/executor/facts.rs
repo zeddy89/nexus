@@ -231,13 +231,19 @@ impl FactGatherer {
         // Hostname
         let result = conn.exec("hostname -f 2>/dev/null || hostname")?;
         if result.success() {
-            facts.insert("hostname".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "hostname".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Short hostname
         let result = conn.exec("hostname -s 2>/dev/null || hostname")?;
         if result.success() {
-            facts.insert("hostname_short".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "hostname_short".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Distribution info (works on most Linux systems)
@@ -252,31 +258,46 @@ impl FactGatherer {
         // Kernel version
         let result = conn.exec("uname -r")?;
         if result.success() {
-            facts.insert("kernel_version".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "kernel_version".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Architecture
         let result = conn.exec("uname -m")?;
         if result.success() {
-            facts.insert("architecture".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "architecture".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Uptime
         let result = conn.exec("uptime -s 2>/dev/null || uptime")?;
         if result.success() {
-            facts.insert("uptime".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "uptime".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Date/time
         let result = conn.exec("date -Iseconds")?;
         if result.success() {
-            facts.insert("date_time".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "date_time".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Timezone
         let result = conn.exec("cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || echo 'Unknown'")?;
         if result.success() {
-            facts.insert("timezone".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "timezone".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         Ok(facts)
@@ -297,7 +318,10 @@ impl FactGatherer {
         // CPU model
         let result = conn.exec("grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2")?;
         if result.success() {
-            facts.insert("cpu_model".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "cpu_model".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Memory total (in KB)
@@ -337,7 +361,8 @@ impl FactGatherer {
         // Block devices
         let result = conn.exec("lsblk -n -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null | head -20")?;
         if result.success() {
-            let devices: Vec<Value> = result.stdout
+            let devices: Vec<Value> = result
+                .stdout
                 .lines()
                 .filter_map(|line| {
                     let parts: Vec<&str> = line.split_whitespace().collect();
@@ -347,7 +372,10 @@ impl FactGatherer {
                         device.insert("size".to_string(), Value::String(parts[1].to_string()));
                         device.insert("type".to_string(), Value::String(parts[2].to_string()));
                         if parts.len() > 3 {
-                            device.insert("mountpoint".to_string(), Value::String(parts[3].to_string()));
+                            device.insert(
+                                "mountpoint".to_string(),
+                                Value::String(parts[3].to_string()),
+                            );
                         }
                         Some(Value::Dict(device))
                     } else {
@@ -368,7 +396,8 @@ impl FactGatherer {
         // Get all interfaces
         let result = conn.exec("ip -o link show | awk -F': ' '{print $2}'")?;
         if result.success() {
-            let interfaces: Vec<Value> = result.stdout
+            let interfaces: Vec<Value> = result
+                .stdout
                 .lines()
                 .map(|s| Value::String(s.trim().to_string()))
                 .collect();
@@ -378,13 +407,17 @@ impl FactGatherer {
         // Get default IPv4 address
         let result = conn.exec("ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \\K[^ ]+'")?;
         if result.success() && !result.stdout.trim().is_empty() {
-            facts.insert("default_ipv4".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "default_ipv4".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Get all IPv4 addresses
         let result = conn.exec("ip -4 addr show | grep -oP 'inet \\K[^/]+'")?;
         if result.success() {
-            let ips: Vec<Value> = result.stdout
+            let ips: Vec<Value> = result
+                .stdout
                 .lines()
                 .map(|s| Value::String(s.trim().to_string()))
                 .collect();
@@ -394,13 +427,17 @@ impl FactGatherer {
         // Get default gateway
         let result = conn.exec("ip -4 route show default | awk '/default/ {print $3}'")?;
         if result.success() && !result.stdout.trim().is_empty() {
-            facts.insert("default_gateway".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "default_gateway".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // DNS servers
         let result = conn.exec("grep '^nameserver' /etc/resolv.conf | awk '{print $2}'")?;
         if result.success() {
-            let dns: Vec<Value> = result.stdout
+            let dns: Vec<Value> = result
+                .stdout
                 .lines()
                 .map(|s| Value::String(s.trim().to_string()))
                 .collect();
@@ -416,13 +453,17 @@ impl FactGatherer {
 
         let result = conn.exec("df -P | tail -n +2")?;
         if result.success() {
-            let mounts: Vec<Value> = result.stdout
+            let mounts: Vec<Value> = result
+                .stdout
                 .lines()
                 .filter_map(|line| {
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() >= 6 {
                         let mut mount = HashMap::new();
-                        mount.insert("filesystem".to_string(), Value::String(parts[0].to_string()));
+                        mount.insert(
+                            "filesystem".to_string(),
+                            Value::String(parts[0].to_string()),
+                        );
                         if let Ok(n) = parts[1].parse::<i64>() {
                             mount.insert("size_kb".to_string(), Value::Int(n));
                         }
@@ -432,8 +473,14 @@ impl FactGatherer {
                         if let Ok(n) = parts[3].parse::<i64>() {
                             mount.insert("available_kb".to_string(), Value::Int(n));
                         }
-                        mount.insert("use_percent".to_string(), Value::String(parts[4].to_string()));
-                        mount.insert("mount_point".to_string(), Value::String(parts[5].to_string()));
+                        mount.insert(
+                            "use_percent".to_string(),
+                            Value::String(parts[4].to_string()),
+                        );
+                        mount.insert(
+                            "mount_point".to_string(),
+                            Value::String(parts[5].to_string()),
+                        );
                         Some(Value::Dict(mount))
                     } else {
                         None
@@ -463,7 +510,10 @@ impl FactGatherer {
         for (name, cmd) in managers {
             let result = conn.exec(cmd)?;
             if result.success() && !result.stdout.trim().is_empty() {
-                facts.insert("package_manager".to_string(), Value::String(name.to_string()));
+                facts.insert(
+                    "package_manager".to_string(),
+                    Value::String(name.to_string()),
+                );
                 break;
             }
         }
@@ -504,7 +554,8 @@ impl FactGatherer {
             // Get running services
             let result = conn.exec("systemctl list-units --type=service --state=running --no-pager --no-legend | awk '{print $1}' | head -50")?;
             if result.success() {
-                let services: Vec<Value> = result.stdout
+                let services: Vec<Value> = result
+                    .stdout
                     .lines()
                     .map(|s| Value::String(s.trim().to_string()))
                     .collect();
@@ -522,25 +573,35 @@ impl FactGatherer {
         // Current user
         let result = conn.exec("whoami")?;
         if result.success() {
-            facts.insert("user".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "user".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Home directory
         let result = conn.exec("echo $HOME")?;
         if result.success() {
-            facts.insert("home".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "home".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Shell
         let result = conn.exec("echo $SHELL")?;
         if result.success() {
-            facts.insert("shell".to_string(), Value::String(result.stdout.trim().to_string()));
+            facts.insert(
+                "shell".to_string(),
+                Value::String(result.stdout.trim().to_string()),
+            );
         }
 
         // Path
         let result = conn.exec("echo $PATH")?;
         if result.success() {
-            let paths: Vec<Value> = result.stdout
+            let paths: Vec<Value> = result
+                .stdout
                 .trim()
                 .split(':')
                 .map(|s| Value::String(s.to_string()))
@@ -561,11 +622,21 @@ impl FactGatherer {
                 let value = value.trim().trim_matches('"').to_string();
 
                 match key.as_str() {
-                    "id" => { facts.insert("os_family".to_string(), Value::String(value)); }
-                    "name" => { facts.insert("os_name".to_string(), Value::String(value)); }
-                    "version_id" => { facts.insert("os_version".to_string(), Value::String(value)); }
-                    "pretty_name" => { facts.insert("os_pretty_name".to_string(), Value::String(value)); }
-                    "version_codename" => { facts.insert("os_codename".to_string(), Value::String(value)); }
+                    "id" => {
+                        facts.insert("os_family".to_string(), Value::String(value));
+                    }
+                    "name" => {
+                        facts.insert("os_name".to_string(), Value::String(value));
+                    }
+                    "version_id" => {
+                        facts.insert("os_version".to_string(), Value::String(value));
+                    }
+                    "pretty_name" => {
+                        facts.insert("os_pretty_name".to_string(), Value::String(value));
+                    }
+                    "version_codename" => {
+                        facts.insert("os_codename".to_string(), Value::String(value));
+                    }
                     _ => {}
                 }
             }
@@ -597,7 +668,9 @@ mod tests {
         assert!(cache.needs_refresh("host1"));
 
         let mut facts = HostFacts::new();
-        facts.facts.insert("hostname".to_string(), Value::String("myhost".to_string()));
+        facts
+            .facts
+            .insert("hostname".to_string(), Value::String("myhost".to_string()));
         cache.set_facts("host1", facts);
 
         assert!(!cache.needs_refresh("host1"));
@@ -641,8 +714,17 @@ VERSION_CODENAME=jammy
 "#;
         let facts = FactGatherer::parse_os_release(content);
 
-        assert_eq!(facts.get("os_family"), Some(&Value::String("ubuntu".to_string())));
-        assert_eq!(facts.get("os_name"), Some(&Value::String("Ubuntu".to_string())));
-        assert_eq!(facts.get("os_version"), Some(&Value::String("22.04".to_string())));
+        assert_eq!(
+            facts.get("os_family"),
+            Some(&Value::String("ubuntu".to_string()))
+        );
+        assert_eq!(
+            facts.get("os_name"),
+            Some(&Value::String("Ubuntu".to_string()))
+        );
+        assert_eq!(
+            facts.get("os_version"),
+            Some(&Value::String("22.04".to_string()))
+        );
     }
 }

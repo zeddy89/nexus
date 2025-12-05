@@ -185,9 +185,14 @@ pub fn calculate_delay(strategy: &DelayStrategy, attempt: u32) -> Duration {
                 delay
             }
         }
-        DelayStrategy::Linear { base, increment, max } => {
+        DelayStrategy::Linear {
+            base,
+            increment,
+            max,
+        } => {
             // delay = base + (increment * attempt)
-            let delay_ms = base.as_millis() as u64 + (increment.as_millis() as u64 * attempt as u64);
+            let delay_ms =
+                base.as_millis() as u64 + (increment.as_millis() as u64 * attempt as u64);
             Duration::from_millis(delay_ms.min(max.as_millis() as u64))
         }
     }

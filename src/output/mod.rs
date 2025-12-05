@@ -20,8 +20,7 @@ pub use terminal::*;
 pub use tui::*;
 
 /// Output format for Nexus
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OutputFormat {
     /// Human-readable text output with colors
     #[default]
@@ -29,8 +28,6 @@ pub enum OutputFormat {
     /// Machine-readable JSON output (NDJSON format)
     Json,
 }
-
-
 
 impl std::str::FromStr for OutputFormat {
     type Err = ();
@@ -43,7 +40,6 @@ impl std::str::FromStr for OutputFormat {
         }
     }
 }
-
 
 /// Unified output writer supporting both text and JSON formats
 pub enum OutputWriter {

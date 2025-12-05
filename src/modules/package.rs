@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use super::{detect_package_manager, Module, PackageManager};
 use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
-use crate::output::errors::{NexusError, ModuleError};
+use crate::output::errors::{ModuleError, NexusError};
 use crate::parser::ast::PackageState;
 
 pub struct PackageModule {
@@ -38,8 +38,9 @@ impl PackageModule {
                 PackageState::Latest => "upgrade to latest version of",
                 PackageState::Absent => "remove",
             };
-            return Ok(TaskOutput::changed()
-                .with_stdout(format!("Would {} package: {}", action, name)));
+            return Ok(
+                TaskOutput::changed().with_stdout(format!("Would {} package: {}", action, name))
+            );
         }
 
         // Detect package manager (cached)
@@ -78,7 +79,9 @@ impl PackageModule {
                         host: conn.host_name().to_string(),
                         message: format!("Failed to install package {}", name),
                         stderr: Some(result.stderr),
-                        suggestion: Some("Check package name and repository configuration".to_string()),
+                        suggestion: Some(
+                            "Check package name and repository configuration".to_string(),
+                        ),
                     })))
                 }
             }

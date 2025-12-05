@@ -43,11 +43,17 @@ impl Interpreter {
         args: Vec<Value>,
         ctx: &ExecutionContext,
     ) -> Result<Value, NexusError> {
-        let func = self.functions.get(name).ok_or_else(|| NexusError::Runtime {
-            function: Some(name.to_string()),
-            message: format!("Function '{}' not found", name),
-            suggestion: Some("Check function name and ensure it's defined in the functions block".to_string()),
-        })?;
+        let func = self
+            .functions
+            .get(name)
+            .ok_or_else(|| NexusError::Runtime {
+                function: Some(name.to_string()),
+                message: format!("Function '{}' not found", name),
+                suggestion: Some(
+                    "Check function name and ensure it's defined in the functions block"
+                        .to_string(),
+                ),
+            })?;
 
         // Create local scope with parameters
         let mut local_vars = HashMap::new();
@@ -139,10 +145,7 @@ impl Interpreter {
 
                 let items = match iter_val {
                     Value::List(l) => l,
-                    Value::String(s) => s
-                        .chars()
-                        .map(|c| Value::String(c.to_string()))
-                        .collect(),
+                    Value::String(s) => s.chars().map(|c| Value::String(c.to_string())).collect(),
                     _ => {
                         return Err(NexusError::Runtime {
                             function: None,
@@ -194,11 +197,12 @@ impl Interpreter {
                     Ok(result) => Ok(result),
                     Err(e) => {
                         // Find matching except clause
-                        if let Some((_exc_type, exc_var, except_body)) = except_clauses.iter().next() {
+                        if let Some((_exc_type, exc_var, except_body)) =
+                            except_clauses.iter().next()
+                        {
                             // For now, catch all exceptions
                             if let Some(var) = exc_var {
-                                local_vars
-                                    .insert(var.clone(), Value::String(e.to_string()));
+                                local_vars.insert(var.clone(), Value::String(e.to_string()));
                             }
                             return self.execute_block(except_body, ctx, local_vars);
                         }
@@ -218,7 +222,7 @@ impl Interpreter {
 
             Statement::Expression(expr) => {
                 // Check for special function calls
-                if let Expression::FunctionCall { name,  .. } = expr {
+                if let Expression::FunctionCall { name, .. } = expr {
                     if name == "skip" {
                         return Ok(FunctionResult::Skip);
                     }

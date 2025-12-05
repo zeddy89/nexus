@@ -6,14 +6,14 @@ use crate::parser::ast::Value;
 pub fn can_convert(value: &Value, target_type: &str) -> bool {
     match target_type {
         "string" => true, // Everything can be stringified
-        "int" => matches!(
-            value,
-            Value::Int(_) | Value::Float(_) | Value::Bool(_)
-        ) || matches!(value, Value::String(s) if s.parse::<i64>().is_ok()),
-        "float" => matches!(
-            value,
-            Value::Int(_) | Value::Float(_)
-        ) || matches!(value, Value::String(s) if s.parse::<f64>().is_ok()),
+        "int" => {
+            matches!(value, Value::Int(_) | Value::Float(_) | Value::Bool(_))
+                || matches!(value, Value::String(s) if s.parse::<i64>().is_ok())
+        }
+        "float" => {
+            matches!(value, Value::Int(_) | Value::Float(_))
+                || matches!(value, Value::String(s) if s.parse::<f64>().is_ok())
+        }
         "bool" => true, // Everything has truthiness
         "list" => matches!(value, Value::List(_) | Value::String(_)),
         "dict" => matches!(value, Value::Dict(_) | Value::List(_)),
@@ -70,10 +70,7 @@ pub fn types_compatible(a: &Value, b: &Value, op: &str) -> bool {
         }
         "and" | "or" => true, // Logical ops work on truthiness
         "in" => {
-            matches!(
-                b,
-                Value::List(_) | Value::String(_) | Value::Dict(_)
-            )
+            matches!(b, Value::List(_) | Value::String(_) | Value::Dict(_))
         }
         _ => false,
     }
@@ -122,7 +119,10 @@ mod tests {
         assert_eq!(type_of(&Value::Float(3.14)), "float");
         assert_eq!(type_of(&Value::String("hello".to_string())), "string");
         assert_eq!(type_of(&Value::List(vec![])), "list");
-        assert_eq!(type_of(&Value::Dict(std::collections::HashMap::new())), "dict");
+        assert_eq!(
+            type_of(&Value::Dict(std::collections::HashMap::new())),
+            "dict"
+        );
     }
 
     #[test]
@@ -137,8 +137,20 @@ mod tests {
     #[test]
     fn test_types_compatible() {
         assert!(types_compatible(&Value::Int(1), &Value::Int(2), "+"));
-        assert!(types_compatible(&Value::String("a".to_string()), &Value::String("b".to_string()), "+"));
-        assert!(!types_compatible(&Value::Int(1), &Value::String("a".to_string()), "+"));
-        assert!(types_compatible(&Value::Int(1), &Value::String("a".to_string()), "=="));
+        assert!(types_compatible(
+            &Value::String("a".to_string()),
+            &Value::String("b".to_string()),
+            "+"
+        ));
+        assert!(!types_compatible(
+            &Value::Int(1),
+            &Value::String("a".to_string()),
+            "+"
+        ));
+        assert!(types_compatible(
+            &Value::Int(1),
+            &Value::String("a".to_string()),
+            "=="
+        ));
     }
 }

@@ -120,7 +120,8 @@ impl LogEntry {
 
     pub fn format(&self, start_time: Instant) -> String {
         let elapsed = self.timestamp.duration_since(start_time).as_secs();
-        format!("[{:02}:{:02}] {}: {}",
+        format!(
+            "[{:02}:{:02}] {}: {}",
             elapsed / 60,
             elapsed % 60,
             self.host,
@@ -133,13 +134,13 @@ impl LogEntry {
 pub struct TuiState {
     pub playbook_name: String,
     pub start_time: Instant,
-    pub final_elapsed: Option<Duration>,  // Frozen time when complete
+    pub final_elapsed: Option<Duration>, // Frozen time when complete
     pub hosts: HashMap<String, HostState>,
     pub host_order: Vec<String>,
     pub current_task: String,
-    pub total_tasks: usize,       // Total tasks × hosts
-    pub completed_tasks: usize,   // Tasks completed (per-host)
-    pub num_hosts: usize,         // Number of hosts
+    pub total_tasks: usize,     // Total tasks × hosts
+    pub completed_tasks: usize, // Tasks completed (per-host)
+    pub num_hosts: usize,       // Number of hosts
     pub logs: VecDeque<LogEntry>,
     pub is_complete: bool,
     pub final_recap: Option<PlayRecap>,
@@ -237,13 +238,14 @@ impl TuiState {
 
     pub fn playbook_complete(&mut self, recap: PlayRecap) {
         self.is_complete = true;
-        self.final_elapsed = Some(self.start_time.elapsed());  // Freeze timer
+        self.final_elapsed = Some(self.start_time.elapsed()); // Freeze timer
         self.final_recap = Some(recap);
     }
 
     pub fn elapsed(&self) -> Duration {
         // Return frozen time if complete, otherwise current elapsed
-        self.final_elapsed.unwrap_or_else(|| self.start_time.elapsed())
+        self.final_elapsed
+            .unwrap_or_else(|| self.start_time.elapsed())
     }
 
     pub fn scroll_up(&mut self) {
@@ -308,14 +310,19 @@ impl TuiApp {
     }
 
     /// Main event loop
-    async fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(), NexusError> {
+    async fn run_loop(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<(), NexusError> {
         loop {
             // Draw UI
-            terminal.draw(|f| self.render(f)).map_err(|e| NexusError::Runtime {
-                function: None,
-                message: format!("Failed to draw terminal: {}", e),
-                suggestion: None,
-            })?;
+            terminal
+                .draw(|f| self.render(f))
+                .map_err(|e| NexusError::Runtime {
+                    function: None,
+                    message: format!("Failed to draw terminal: {}", e),
+                    suggestion: None,
+                })?;
 
             // Check for events (non-blocking)
             while let Ok(event) = self.rx.try_recv() {
@@ -354,13 +361,19 @@ impl TuiApp {
     /// Handle an execution event
     fn handle_event(&mut self, event: ExecutionEvent) {
         match event {
-            ExecutionEvent::PlaybookStart { name, hosts, total_tasks } => {
+            ExecutionEvent::PlaybookStart {
+                name,
+                hosts,
+                total_tasks,
+            } => {
                 self.state.init_playbook(name, hosts, total_tasks);
             }
             ExecutionEvent::TaskStart { host, task } => {
                 self.state.task_start(host, task);
             }
-            ExecutionEvent::TaskComplete { host, task, status, .. } => {
+            ExecutionEvent::TaskComplete {
+                host, task, status, ..
+            } => {
                 self.state.task_complete(host, task, status);
             }
             ExecutionEvent::TaskSkipped { host, task } => {
@@ -383,9 +396,9 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header
-                Constraint::Min(8),     // Main content
-                Constraint::Length(1),  // Footer
+                Constraint::Length(3), // Header
+                Constraint::Min(8),    // Main content
+                Constraint::Length(1), // Footer
             ])
             .split(f.area());
 
@@ -397,7 +410,8 @@ impl TuiApp {
     /// Render header
     fn render_header(&self, f: &mut Frame, area: Rect) {
         let elapsed = self.state.elapsed();
-        let time_str = format!("[{:02}:{:02}:{:02}]",
+        let time_str = format!(
+            "[{:02}:{:02}:{:02}]",
             elapsed.as_secs() / 3600,
             (elapsed.as_secs() % 3600) / 60,
             elapsed.as_secs() % 60
@@ -418,13 +432,15 @@ impl TuiApp {
         let padding = if inner_width > title_len + time_len {
             inner_width - title_len - time_len
         } else {
-            1  // Minimum 1 space
+            1 // Minimum 1 space
         };
 
         let header = Paragraph::new(Line::from(vec![
             Span::styled(
                 title,
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" ".repeat(padding)),
             Span::styled(time_str, Style::default().fg(Color::Yellow)),
@@ -439,8 +455,8 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(30),  // Hosts panel
-                Constraint::Percentage(70),  // Right panel
+                Constraint::Percentage(30), // Hosts panel
+                Constraint::Percentage(70), // Right panel
             ])
             .split(area);
 
@@ -450,7 +466,10 @@ impl TuiApp {
 
     /// Render hosts panel
     fn render_hosts(&self, f: &mut Frame, area: Rect) {
-        let items: Vec<ListItem> = self.state.host_order.iter()
+        let items: Vec<ListItem> = self
+            .state
+            .host_order
+            .iter()
             .filter_map(|host_name| {
                 self.state.hosts.get(host_name).map(|host| {
                     let symbol = host.status_symbol();
@@ -458,7 +477,10 @@ impl TuiApp {
                     let status = host.status_text();
 
                     let line = Line::from(vec![
-                        Span::styled(symbol, Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            symbol,
+                            Style::default().fg(color).add_modifier(Modifier::BOLD),
+                        ),
                         Span::raw(" "),
                         Span::styled(&host.name, Style::default().fg(Color::White)),
                         Span::raw("  "),
@@ -470,10 +492,7 @@ impl TuiApp {
             })
             .collect();
 
-        let list = List::new(items)
-            .block(Block::default()
-                .title("Hosts")
-                .borders(Borders::ALL));
+        let list = List::new(items).block(Block::default().title("Hosts").borders(Borders::ALL));
 
         f.render_widget(list, area);
     }
@@ -485,9 +504,9 @@ impl TuiApp {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6),  // Progress panel
-                    Constraint::Min(8),     // Recap panel (needs more space)
-                    Constraint::Min(5),     // Logs panel
+                    Constraint::Length(6), // Progress panel
+                    Constraint::Min(8),    // Recap panel (needs more space)
+                    Constraint::Min(5),    // Logs panel
                 ])
                 .split(area);
 
@@ -499,8 +518,8 @@ impl TuiApp {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6),  // Progress panel
-                    Constraint::Min(5),     // Logs panel
+                    Constraint::Length(6), // Progress panel
+                    Constraint::Min(5),    // Logs panel
                 ])
                 .split(area);
 
@@ -526,8 +545,7 @@ impl TuiApp {
             Paragraph::new(format!("Current Task: {}", self.state.current_task))
                 .style(Style::default().fg(Color::Cyan))
         } else {
-            Paragraph::new("Current Task: (none)")
-                .style(Style::default().fg(Color::Gray))
+            Paragraph::new("Current Task: (none)").style(Style::default().fg(Color::Gray))
         };
         f.render_widget(current_task, chunks[0]);
 
@@ -538,7 +556,10 @@ impl TuiApp {
             0.0
         };
 
-        let progress_label = format!("{}/{} tasks", self.state.completed_tasks, self.state.total_tasks);
+        let progress_label = format!(
+            "{}/{} tasks",
+            self.state.completed_tasks, self.state.total_tasks
+        );
 
         let gauge = Gauge::default()
             .block(Block::default())
@@ -548,9 +569,7 @@ impl TuiApp {
 
         f.render_widget(gauge, chunks[2]);
 
-        let block = Block::default()
-            .title("Progress")
-            .borders(Borders::ALL);
+        let block = Block::default().title("Progress").borders(Borders::ALL);
         f.render_widget(block, area);
     }
 
@@ -583,7 +602,9 @@ impl TuiApp {
                     let line = Line::from(vec![
                         Span::styled(
                             format!("{:<20}", host_name),
-                            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(" : "),
                         Span::styled(format!("ok={:<3}", stats.ok), ok_style),
@@ -601,17 +622,15 @@ impl TuiApp {
 
             // Add total time
             items.push(ListItem::new(Line::from(""))); // Empty line
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("Total time: {:.2}s", recap.total_duration.as_secs_f64()),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                ),
-            ])));
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                format!("Total time: {:.2}s", recap.total_duration.as_secs_f64()),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )])));
 
-            let list = List::new(items)
-                .block(Block::default()
-                    .title("PLAY RECAP")
-                    .borders(Borders::ALL));
+            let list =
+                List::new(items).block(Block::default().title("PLAY RECAP").borders(Borders::ALL));
 
             f.render_widget(list, area);
         }
@@ -628,18 +647,20 @@ impl TuiApp {
         let start_idx = self.state.log_scroll;
         let _end_idx = (start_idx + visible_height).min(self.state.logs.len());
 
-        let logs: Vec<ListItem> = self.state.logs.iter()
+        let logs: Vec<ListItem> = self
+            .state
+            .logs
+            .iter()
             .skip(start_idx)
             .take(visible_height)
-            .map(|entry| {
-                ListItem::new(entry.format(self.state.start_time))
-            })
+            .map(|entry| ListItem::new(entry.format(self.state.start_time)))
             .collect();
 
-        let list = List::new(logs)
-            .block(Block::default()
+        let list = List::new(logs).block(
+            Block::default()
                 .title("Log Output (↑/↓ to scroll)")
-                .borders(Borders::ALL));
+                .borders(Borders::ALL),
+        );
 
         f.render_widget(list, area);
     }
@@ -651,9 +672,11 @@ impl TuiApp {
                 .style(Style::default().fg(Color::Green))
                 .alignment(Alignment::Center)
         } else {
-            Paragraph::new("Press 'q' to quit (playbook will continue in background) | ↑/↓ scroll logs")
-                .style(Style::default().fg(Color::Gray))
-                .alignment(Alignment::Center)
+            Paragraph::new(
+                "Press 'q' to quit (playbook will continue in background) | ↑/↓ scroll logs",
+            )
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
         };
 
         f.render_widget(footer, area);

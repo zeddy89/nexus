@@ -1,10 +1,14 @@
 [package]
 name = "nexus"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
-description = "Next-generation infrastructure automation - Ansible but better"
-authors = ["Nexus Contributors"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
+authors = ["Sheldon Lewis"]
+description = "Next-generation infrastructure automation. Ansible, but faster and simpler."
+repository = "https://github.com/zeddy89/nexus"
+keywords = ["automation", "infrastructure", "devops", "configuration-management", "ssh"]
+categories = ["command-line-utilities", "development-tools"]
+rust-version = "1.75"
 
 [dependencies]
 # Async runtime
@@ -50,6 +54,7 @@ similar = "2.3"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
+dns-lookup = "2"
 
 # Vault/Encryption
 aes-gcm = "0.10"

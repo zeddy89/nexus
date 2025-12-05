@@ -71,9 +71,10 @@ impl TaskDag {
 
     /// Add explicit dependency between tasks
     pub fn add_dependency(&mut self, task_name: &str, depends_on: &str) {
-        if let (Some(&task_id), Some(&dep_id)) =
-            (self.name_to_id.get(task_name), self.name_to_id.get(depends_on))
-        {
+        if let (Some(&task_id), Some(&dep_id)) = (
+            self.name_to_id.get(task_name),
+            self.name_to_id.get(depends_on),
+        ) {
             self.nodes[task_id].dependencies.insert(dep_id);
         }
     }
@@ -134,7 +135,12 @@ impl TaskDag {
         let mut result = Vec::new();
         let mut visited = HashSet::new();
 
-        fn visit(dag: &TaskDag, node_id: usize, visited: &mut HashSet<usize>, result: &mut Vec<usize>) {
+        fn visit(
+            dag: &TaskDag,
+            node_id: usize,
+            visited: &mut HashSet<usize>,
+            result: &mut Vec<usize>,
+        ) {
             if visited.contains(&node_id) {
                 return;
             }

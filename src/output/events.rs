@@ -16,10 +16,7 @@ pub enum ExecutionEvent {
     },
 
     /// Task started on a host
-    TaskStart {
-        host: String,
-        task: String,
-    },
+    TaskStart { host: String, task: String },
 
     /// Task completed on a host
     TaskComplete {
@@ -30,10 +27,7 @@ pub enum ExecutionEvent {
     },
 
     /// Task was skipped on a host
-    TaskSkipped {
-        host: String,
-        task: String,
-    },
+    TaskSkipped { host: String, task: String },
 
     /// Task failed on a host
     TaskFailed {
@@ -43,15 +37,10 @@ pub enum ExecutionEvent {
     },
 
     /// Log output from a task
-    Log {
-        host: String,
-        message: String,
-    },
+    Log { host: String, message: String },
 
     /// Playbook execution completed
-    PlaybookComplete {
-        recap: PlayRecap,
-    },
+    PlaybookComplete { recap: PlayRecap },
 }
 
 /// Status of a completed task
@@ -108,7 +97,13 @@ impl EventEmitter {
     }
 
     /// Emit a task complete event
-    pub fn task_complete(&self, host: String, task: String, status: TaskStatus, duration: Duration) {
+    pub fn task_complete(
+        &self,
+        host: String,
+        task: String,
+        status: TaskStatus,
+        duration: Duration,
+    ) {
         let _ = self.tx.send(ExecutionEvent::TaskComplete {
             host,
             task,
@@ -124,7 +119,9 @@ impl EventEmitter {
 
     /// Emit a task failed event
     pub fn task_failed(&self, host: String, task: String, error: String) {
-        let _ = self.tx.send(ExecutionEvent::TaskFailed { host, task, error });
+        let _ = self
+            .tx
+            .send(ExecutionEvent::TaskFailed { host, task, error });
     }
 
     /// Emit a log event

@@ -338,10 +338,7 @@ mod tests {
             .with_var("env", Value::String("prod".to_string()));
 
         let mut vars = HashMap::new();
-        vars.insert(
-            "webserver".to_string(),
-            Value::String("nginx".to_string()),
-        );
+        vars.insert("webserver".to_string(), Value::String("nginx".to_string()));
 
         ExecutionContext::new(Arc::new(host), vars)
     }
@@ -374,7 +371,10 @@ mod tests {
 
         let val = ctx.get_var("result").unwrap();
         if let Value::Dict(map) = val {
-            assert_eq!(map.get("stdout"), Some(&Value::String("hello world".to_string())));
+            assert_eq!(
+                map.get("stdout"),
+                Some(&Value::String("hello world".to_string()))
+            );
         } else {
             panic!("Expected Dict");
         }

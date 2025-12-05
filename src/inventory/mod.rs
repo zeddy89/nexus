@@ -1,9 +1,15 @@
 // Inventory module for host management
 
+mod discovery;
+mod discovery_daemon;
+mod discovery_profile;
 mod dynamic;
 mod groups;
 mod static_inv;
 
+pub use discovery::*;
+pub use discovery_daemon::*;
+pub use discovery_profile::*;
 pub use dynamic::*;
 pub use groups::*;
 pub use static_inv::*;
@@ -12,7 +18,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::output::errors::NexusError;
-use crate::parser::ast::{HostPattern, Value};
+use crate::parser::ast::{HostPattern, InlineHost, Value};
 
 /// A single host in the inventory
 #[derive(Debug, Clone)]
@@ -81,8 +87,12 @@ impl Host {
         }
 
         // Check if hostname is localhost or 127.0.0.1
-        self.name == "localhost" || self.name == "127.0.0.1" || self.name == "::1" ||
-        self.address == "localhost" || self.address == "127.0.0.1" || self.address == "::1"
+        self.name == "localhost"
+            || self.name == "127.0.0.1"
+            || self.name == "::1"
+            || self.address == "localhost"
+            || self.address == "127.0.0.1"
+            || self.address == "::1"
     }
 
     /// Create a localhost host for delegation
@@ -186,6 +196,82 @@ impl Inventory {
     pub fn parse_str(content: &str) -> Result<Self, NexusError> {
         parse_inventory(content)
     }
+
+    /// Create inventory from CLI hosts string (comma-separated)
+    ///
+    /// Example: "server1.example.com,server2.example.com,192.168.1.10"
+    pub fn from_cli_hosts(hosts_str: &str, default_user: Option<&str>) -> Self {
+        let mut inv = Inventory::new();
+        inv.default_user = default_user.map(|s| s.to_string());
+
+        for host_str in hosts_str.split(',') {
+            let host_str = host_str.trim();
+            if host_str.is_empty() {
+                continue;
+            }
+
+            let mut host = Host::new(host_str);
+
+            // If it looks like an IP or hostname, use it as the address
+            host = host.with_address(host_str);
+
+            // Apply default user if provided
+            if let Some(user) = default_user {
+                host = host.with_user(user);
+            }
+
+            inv.add_host(host);
+        }
+
+        inv
+    }
+
+    /// Create a localhost-only inventory
+    ///
+    /// Used for playbooks that only target localhost
+    pub fn localhost_only() -> Self {
+        let mut inv = Inventory::new();
+        inv.add_host(Host::localhost());
+        inv
+    }
+
+    /// Create inventory from inline host definitions (playbook-embedded)
+    ///
+    /// Used when playbooks define hosts directly in the `hosts:` section
+    pub fn from_inline_hosts(inline_hosts: &[InlineHost], default_user: Option<&str>) -> Self {
+        let mut inv = Inventory::new();
+        inv.default_user = default_user.map(|s| s.to_string());
+
+        for inline in inline_hosts {
+            let mut host = Host::new(&inline.name);
+
+            // Set address (falls back to name if not specified)
+            if let Some(addr) = &inline.address {
+                host = host.with_address(addr);
+            }
+
+            // Set port
+            if let Some(port) = inline.port {
+                host = host.with_port(port);
+            }
+
+            // Set user (inline user takes precedence, then default)
+            if let Some(user) = &inline.user {
+                host = host.with_user(user);
+            } else if let Some(user) = default_user {
+                host = host.with_user(user);
+            }
+
+            // Copy inline variables
+            for (key, value) in &inline.vars {
+                host = host.with_var(key, value.clone());
+            }
+
+            inv.add_host(host);
+        }
+
+        inv
+    }
 }
 
 impl std::str::FromStr for Inventory {
@@ -194,8 +280,6 @@ impl std::str::FromStr for Inventory {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_inventory(s)
     }
-
-
 }
 
 impl Inventory {
@@ -244,6 +328,23 @@ impl Inventory {
                 }
             }
             HostPattern::Pattern(pat) => self.match_pattern(pat),
+            HostPattern::Localhost => {
+                // Return localhost from inventory, or create one if not present
+                if let Some(host) = self.hosts.get("localhost") {
+                    vec![host]
+                } else {
+                    // Check for 127.0.0.1 as well
+                    self.hosts
+                        .get("127.0.0.1")
+                        .map(|h| vec![h])
+                        .unwrap_or_default()
+                }
+            }
+            HostPattern::Inline(_) => {
+                // For inline hosts, the inventory was pre-built from the inline list
+                // Return all hosts in the inventory
+                self.hosts.values().collect()
+            }
         }
     }
 

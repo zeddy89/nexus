@@ -18,10 +18,7 @@ pub type JobId = String;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum JobStatus {
     /// Job is still running
-    Running {
-        pid: i32,
-        started_at: String,
-    },
+    Running { pid: i32, started_at: String },
     /// Job completed successfully
     Finished {
         exit_code: i32,
@@ -29,9 +26,7 @@ pub enum JobStatus {
         stderr: String,
     },
     /// Job failed
-    Failed {
-        error: String,
-    },
+    Failed { error: String },
     /// Job timed out
     TimedOut,
     /// Job not found (may have been cleaned up)
@@ -146,14 +141,12 @@ impl AsyncJobTracker {
 
         // Read the PID
         let pid_result = conn.exec(&format!("cat {}", job_file))?;
-        let pid: i32 = pid_result
-            .stdout
-            .trim()
-            .parse()
-            .unwrap_or(0);
+        let pid: i32 = pid_result.stdout.trim().parse().unwrap_or(0);
 
         // Check if process is still running
-        let is_running = conn.exec(&format!("kill -0 {} 2>/dev/null", pid))?.success();
+        let is_running = conn
+            .exec(&format!("kill -0 {} 2>/dev/null", pid))?
+            .success();
 
         if is_running {
             // Process still running
@@ -172,12 +165,9 @@ impl AsyncJobTracker {
             .stderr;
 
         // Get exit code from status file if it exists
-        let exit_code_result = conn.exec(&format!("cat {}.exit 2>/dev/null || echo 0", job_file))?;
-        let exit_code: i32 = exit_code_result
-            .stdout
-            .trim()
-            .parse()
-            .unwrap_or(0);
+        let exit_code_result =
+            conn.exec(&format!("cat {}.exit 2>/dev/null || echo 0", job_file))?;
+        let exit_code: i32 = exit_code_result.stdout.trim().parse().unwrap_or(0);
 
         Ok(JobStatus::Finished {
             exit_code,
@@ -215,7 +205,11 @@ impl AsyncJobTracker {
                     // Wait before next poll
                     tokio::time::sleep(poll_duration).await;
                 }
-                JobStatus::Finished { exit_code, stdout, stderr } => {
+                JobStatus::Finished {
+                    exit_code,
+                    stdout,
+                    stderr,
+                } => {
                     // Cleanup job files
                     self.cleanup_job(conn, job_id).await.ok();
 
@@ -248,11 +242,7 @@ impl AsyncJobTracker {
     }
 
     /// Kill a running async job
-    pub async fn kill_job(
-        &self,
-        conn: &SshConnection,
-        job_id: &str,
-    ) -> Result<(), NexusError> {
+    pub async fn kill_job(&self, conn: &SshConnection, job_id: &str) -> Result<(), NexusError> {
         let job_file = format!("/tmp/.nexus_async_{}", job_id);
 
         // Read PID
@@ -261,18 +251,17 @@ impl AsyncJobTracker {
 
         if pid > 0 {
             // Kill the process and all children
-            conn.exec(&format!("kill -TERM -{} 2>/dev/null || kill -TERM {} 2>/dev/null", pid, pid))?;
+            conn.exec(&format!(
+                "kill -TERM -{} 2>/dev/null || kill -TERM {} 2>/dev/null",
+                pid, pid
+            ))?;
         }
 
         Ok(())
     }
 
     /// Cleanup job files from remote host
-    pub async fn cleanup_job(
-        &self,
-        conn: &SshConnection,
-        job_id: &str,
-    ) -> Result<(), NexusError> {
+    pub async fn cleanup_job(&self, conn: &SshConnection, job_id: &str) -> Result<(), NexusError> {
         let pattern = format!("/tmp/.nexus_async_{}*", job_id);
         conn.exec(&format!("rm -f {}", pattern))?;
 

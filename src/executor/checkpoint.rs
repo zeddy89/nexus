@@ -236,11 +236,12 @@ impl CheckpointManager {
             path: Some(path.to_path_buf()),
         })?;
 
-        let checkpoint: Checkpoint = serde_json::from_str(&json).map_err(|e| NexusError::Runtime {
-            function: None,
-            message: format!("Failed to parse checkpoint: {}", e),
-            suggestion: Some("The checkpoint file may be corrupted".to_string()),
-        })?;
+        let checkpoint: Checkpoint =
+            serde_json::from_str(&json).map_err(|e| NexusError::Runtime {
+                function: None,
+                message: format!("Failed to parse checkpoint: {}", e),
+                suggestion: Some("The checkpoint file may be corrupted".to_string()),
+            })?;
 
         Ok(checkpoint)
     }
@@ -433,12 +434,18 @@ mod tests {
         );
 
         // Same content should verify
-        assert!(checkpoint.verify(content, &PathBuf::from("/tmp/inventory.yml")).is_ok());
+        assert!(checkpoint
+            .verify(content, &PathBuf::from("/tmp/inventory.yml"))
+            .is_ok());
 
         // Different content should fail
-        assert!(checkpoint.verify("different", &PathBuf::from("/tmp/inventory.yml")).is_err());
+        assert!(checkpoint
+            .verify("different", &PathBuf::from("/tmp/inventory.yml"))
+            .is_err());
 
         // Different inventory should fail
-        assert!(checkpoint.verify(content, &PathBuf::from("/tmp/other.yml")).is_err());
+        assert!(checkpoint
+            .verify(content, &PathBuf::from("/tmp/other.yml"))
+            .is_err());
     }
 }

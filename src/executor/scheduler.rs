@@ -120,7 +120,11 @@ impl Scheduler {
         Self::with_callbacks(config, output, Arc::new(CallbackManager::new()))
     }
 
-    pub fn with_callbacks(config: SchedulerConfig, output: Arc<Mutex<OutputWriter>>, callbacks: Arc<CallbackManager>) -> Self {
+    pub fn with_callbacks(
+        config: SchedulerConfig,
+        output: Arc<Mutex<OutputWriter>>,
+        callbacks: Arc<CallbackManager>,
+    ) -> Self {
         let mut pool = ConnectionPool::new()
             .with_connect_timeout(config.connect_timeout)
             .with_command_timeout(config.command_timeout);
@@ -159,7 +163,9 @@ impl Scheduler {
 
     /// Add a role search path relative to the playbook
     pub fn add_playbook_role_path(&self, playbook_path: &std::path::Path) {
-        self.role_resolver.lock().add_playbook_relative_path(playbook_path);
+        self.role_resolver
+            .lock()
+            .add_playbook_relative_path(playbook_path);
     }
 
     /// Set the event emitter for TUI mode
@@ -176,9 +182,7 @@ impl Scheduler {
     ) -> ExecutionContext {
         self.host_contexts
             .entry(host.name.clone())
-            .or_insert_with(|| {
-                ExecutionContext::new(Arc::new(host.clone()), playbook_vars.clone())
-            })
+            .or_insert_with(|| ExecutionContext::new(Arc::new(host.clone()), playbook_vars.clone()))
             .clone()
     }
 
@@ -221,12 +225,15 @@ impl Scheduler {
 
         // Callback: playbook start
         let host_names: Vec<String> = hosts.iter().map(|h| h.name.clone()).collect();
-        self.callbacks.on_playbook_start(&playbook.source_file, &host_names).await;
+        self.callbacks
+            .on_playbook_start(&playbook.source_file, &host_names)
+            .await;
 
         // Emit playbook start event for TUI
         if let Some(ref emitter) = self.event_emitter {
             // Count total tasks including role tasks
-            let mut total_tasks = playbook.tasks.len() + playbook.pre_tasks.len() + playbook.post_tasks.len();
+            let mut total_tasks =
+                playbook.tasks.len() + playbook.pre_tasks.len() + playbook.post_tasks.len();
 
             // Add tasks from roles
             for role_ref in &playbook.roles {
@@ -261,7 +268,9 @@ impl Scheduler {
 
         // If serial execution is configured, use batched execution
         if let Some(ref serial) = playbook.serial {
-            return self.execute_playbook_serial(playbook, inventory, &hosts, serial).await;
+            return self
+                .execute_playbook_serial(playbook, inventory, &hosts, serial)
+                .await;
         }
 
         let mut recap = PlayRecap::new();
@@ -385,16 +394,18 @@ impl Scheduler {
         if !playbook.pre_tasks.is_empty() {
             self.output.lock().print_task_header("PRE-TASKS");
 
-            let failed = self.execute_task_list(
-                &playbook.pre_tasks,
-                &hosts,
-                &effective_vars,
-                use_sudo,
-                &playbook.sudo_user,
-                &tag_filter,
-                &handler_registry,
-                &mut recap,
-            ).await?;
+            let failed = self
+                .execute_task_list(
+                    &playbook.pre_tasks,
+                    &hosts,
+                    &effective_vars,
+                    use_sudo,
+                    &playbook.sudo_user,
+                    &tag_filter,
+                    &handler_registry,
+                    &mut recap,
+                )
+                .await?;
 
             if failed {
                 recap.total_duration = start_time.elapsed();
@@ -408,14 +419,15 @@ impl Scheduler {
             for role_ref in &playbook.roles {
                 // Check when condition for role
                 if let Some(ref when) = role_ref.when {
-                    let ctx = ExecutionContext::new(
-                        Arc::new(hosts[0].clone()),
-                        effective_vars.clone(),
-                    );
+                    let ctx =
+                        ExecutionContext::new(Arc::new(hosts[0].clone()), effective_vars.clone());
                     let result = evaluate_expression(when, &ctx)?;
                     if !result.is_truthy() {
                         if self.config.verbose {
-                            self.output.lock().print_task_header(&format!("ROLE: {} (skipped by condition)", role_ref.role));
+                            self.output.lock().print_task_header(&format!(
+                                "ROLE: {} (skipped by condition)",
+                                role_ref.role
+                            ));
                         }
                         continue;
                     }
@@ -447,16 +459,24 @@ impl Scheduler {
 
                     // Add role paths to vars for template/file lookups
                     if let Some(ref templates_path) = role.templates_path {
-                        role_vars.insert("role_templates_path".to_string(), Value::String(templates_path.clone()));
+                        role_vars.insert(
+                            "role_templates_path".to_string(),
+                            Value::String(templates_path.clone()),
+                        );
                     }
                     if let Some(ref files_path) = role.files_path {
-                        role_vars.insert("role_files_path".to_string(), Value::String(files_path.clone()));
+                        role_vars.insert(
+                            "role_files_path".to_string(),
+                            Value::String(files_path.clone()),
+                        );
                     }
                     role_vars.insert("role_path".to_string(), Value::String(role.path.clone()));
                     role_vars.insert("role_name".to_string(), Value::String(role.name.clone()));
 
                     // Print role header
-                    self.output.lock().print_task_header(&format!("ROLE: {}", role.name));
+                    self.output
+                        .lock()
+                        .print_task_header(&format!("ROLE: {}", role.name));
 
                     // Add role handlers to registry
                     for handler in &role.handlers {
@@ -472,16 +492,18 @@ impl Scheduler {
                     };
 
                     // Execute role tasks
-                    let failed = self.execute_task_list(
-                        &role.tasks,
-                        &hosts,
-                        &role_vars,
-                        use_sudo,
-                        &playbook.sudo_user,
-                        &role_tag_filter,
-                        &handler_registry,
-                        &mut recap,
-                    ).await?;
+                    let failed = self
+                        .execute_task_list(
+                            &role.tasks,
+                            &hosts,
+                            &role_vars,
+                            use_sudo,
+                            &playbook.sudo_user,
+                            &role_tag_filter,
+                            &handler_registry,
+                            &mut recap,
+                        )
+                        .await?;
 
                     if failed {
                         recap.total_duration = start_time.elapsed();
@@ -494,16 +516,18 @@ impl Scheduler {
 
         // 3. Execute regular tasks
         if !playbook.tasks.is_empty() {
-            let failed = self.execute_task_list(
-                &playbook.tasks,
-                &hosts,
-                &effective_vars,
-                use_sudo,
-                &playbook.sudo_user,
-                &tag_filter,
-                &handler_registry,
-                &mut recap,
-            ).await?;
+            let failed = self
+                .execute_task_list(
+                    &playbook.tasks,
+                    &hosts,
+                    &effective_vars,
+                    use_sudo,
+                    &playbook.sudo_user,
+                    &tag_filter,
+                    &handler_registry,
+                    &mut recap,
+                )
+                .await?;
 
             if failed {
                 recap.total_duration = start_time.elapsed();
@@ -516,16 +540,18 @@ impl Scheduler {
         if !playbook.post_tasks.is_empty() {
             self.output.lock().print_task_header("POST-TASKS");
 
-            let failed = self.execute_task_list(
-                &playbook.post_tasks,
-                &hosts,
-                &effective_vars,
-                use_sudo,
-                &playbook.sudo_user,
-                &tag_filter,
-                &handler_registry,
-                &mut recap,
-            ).await?;
+            let failed = self
+                .execute_task_list(
+                    &playbook.post_tasks,
+                    &hosts,
+                    &effective_vars,
+                    use_sudo,
+                    &playbook.sudo_user,
+                    &tag_filter,
+                    &handler_registry,
+                    &mut recap,
+                )
+                .await?;
 
             if failed {
                 recap.total_duration = start_time.elapsed();
@@ -541,7 +567,14 @@ impl Scheduler {
             }
 
             let handler_results = self
-                .execute_handlers(&all_handlers, &hosts, &effective_vars, use_sudo, &playbook.sudo_user, &handler_registry)
+                .execute_handlers(
+                    &all_handlers,
+                    &hosts,
+                    &effective_vars,
+                    use_sudo,
+                    &playbook.sudo_user,
+                    &handler_registry,
+                )
                 .await?;
 
             for result in handler_results {
@@ -581,63 +614,11 @@ impl Scheduler {
     ) -> Result<bool, NexusError> {
         for item in tasks {
             match item {
-            TaskOrBlock::Import(import) => {
-                // Static import - load tasks from file and execute inline
-                let failed = self.execute_import(
-                    import,
-                    hosts,
-                    vars,
-                    use_sudo,
-                    sudo_user,
-                    tag_filter,
-                    handler_registry,
-                    recap,
-                ).await?;
-
-                if failed {
-                    return Ok(true);
-                }
-            }
-            TaskOrBlock::Include(include) => {
-                // Dynamic include - resolve file path and vars at runtime
-                // Check when condition
-                if let Some(ref when) = include.when {
-                    let ctx = ExecutionContext::new(
-                        Arc::new(hosts[0].clone()),
-                        vars.clone(),
-                    );
-                    let result = evaluate_expression(when, &ctx)?;
-                    if !result.is_truthy() {
-                        if self.config.verbose {
-                            self.output.lock().print_task_header("INCLUDE (skipped by condition)");
-                        }
-                        continue;
-                    }
-                }
-
-                // Handle loop
-                if let Some(ref loop_expr) = include.loop_expr {
-                    let ctx = ExecutionContext::new(
-                        Arc::new(hosts[0].clone()),
-                        vars.clone(),
-                    );
-                    let loop_value = evaluate_expression(loop_expr, &ctx)?;
-
-                    let items = match loop_value {
-                        Value::List(items) => items,
-                        _ => {
-                            return Err(NexusError::Runtime {
-                                function: None,
-                                message: "include_tasks loop must evaluate to a list".to_string(),
-                                suggestion: None,
-                            })
-                        }
-                    };
-
-                    // Execute include for each item
-                    for (i, item) in items.into_iter().enumerate() {
-                        let failed = self.execute_single_include(
-                            include,
+                TaskOrBlock::Import(import) => {
+                    // Static import - load tasks from file and execute inline
+                    let failed = self
+                        .execute_import(
+                            import,
                             hosts,
                             vars,
                             use_sudo,
@@ -645,100 +626,156 @@ impl Scheduler {
                             tag_filter,
                             handler_registry,
                             recap,
-                            Some((item, i)),
-                        ).await?;
-
-                        if failed {
-                            return Ok(true);
-                        }
-                    }
-                } else {
-                    // No loop - execute once
-                    let failed = self.execute_single_include(
-                        include,
-                        hosts,
-                        vars,
-                        use_sudo,
-                        sudo_user,
-                        tag_filter,
-                        handler_registry,
-                        recap,
-                        None,
-                    ).await?;
+                        )
+                        .await?;
 
                     if failed {
                         return Ok(true);
                     }
                 }
-            }
-            TaskOrBlock::Task(task) => {
-
-            let results = self
-                .execute_task_on_hosts_with_handlers(
-                    task,
-                    hosts,
-                    vars,
-                    use_sudo,
-                    sudo_user,
-                    handler_registry,
-                )
-                .await?;
-
-            for result in results {
-                recap.record(&result);
-                self.output.lock().print_task_result(&result);
-
-                // Stop on failure
-                if result.failed {
-                    return Ok(true);
-                }
-            }
-            }
-            TaskOrBlock::Block(block) => {
-                // Check if block should run based on tags
-                if !tag_filter.should_run(&block.tags) {
-                    if self.config.verbose {
-                        let block_name = block.name.as_deref().unwrap_or("Block");
-                        self.output.lock().print_task_header(&format!("{} (skipped by tags)", block_name));
+                TaskOrBlock::Include(include) => {
+                    // Dynamic include - resolve file path and vars at runtime
+                    // Check when condition
+                    if let Some(ref when) = include.when {
+                        let ctx = ExecutionContext::new(Arc::new(hosts[0].clone()), vars.clone());
+                        let result = evaluate_expression(when, &ctx)?;
+                        if !result.is_truthy() {
+                            if self.config.verbose {
+                                self.output
+                                    .lock()
+                                    .print_task_header("INCLUDE (skipped by condition)");
+                            }
+                            continue;
+                        }
                     }
-                    continue;
-                }
 
-                // Check when condition for block
-                if let Some(ref when) = block.when {
-                    // Create a temporary context for the when evaluation
-                    let ctx = ExecutionContext::new(
-                        Arc::new(hosts[0].clone()),
-                        vars.clone(),
-                    );
-                    let result = evaluate_expression(when, &ctx)?;
-                    if !result.is_truthy() {
+                    // Handle loop
+                    if let Some(ref loop_expr) = include.loop_expr {
+                        let ctx = ExecutionContext::new(Arc::new(hosts[0].clone()), vars.clone());
+                        let loop_value = evaluate_expression(loop_expr, &ctx)?;
+
+                        let items = match loop_value {
+                            Value::List(items) => items,
+                            _ => {
+                                return Err(NexusError::Runtime {
+                                    function: None,
+                                    message: "include_tasks loop must evaluate to a list"
+                                        .to_string(),
+                                    suggestion: None,
+                                })
+                            }
+                        };
+
+                        // Execute include for each item
+                        for (i, item) in items.into_iter().enumerate() {
+                            let failed = self
+                                .execute_single_include(
+                                    include,
+                                    hosts,
+                                    vars,
+                                    use_sudo,
+                                    sudo_user,
+                                    tag_filter,
+                                    handler_registry,
+                                    recap,
+                                    Some((item, i)),
+                                )
+                                .await?;
+
+                            if failed {
+                                return Ok(true);
+                            }
+                        }
+                    } else {
+                        // No loop - execute once
+                        let failed = self
+                            .execute_single_include(
+                                include,
+                                hosts,
+                                vars,
+                                use_sudo,
+                                sudo_user,
+                                tag_filter,
+                                handler_registry,
+                                recap,
+                                None,
+                            )
+                            .await?;
+
+                        if failed {
+                            return Ok(true);
+                        }
+                    }
+                }
+                TaskOrBlock::Task(task) => {
+                    let results = self
+                        .execute_task_on_hosts_with_handlers(
+                            task,
+                            hosts,
+                            vars,
+                            use_sudo,
+                            sudo_user,
+                            handler_registry,
+                        )
+                        .await?;
+
+                    for result in results {
+                        recap.record(&result);
+                        self.output.lock().print_task_result(&result);
+
+                        // Stop on failure
+                        if result.failed {
+                            return Ok(true);
+                        }
+                    }
+                }
+                TaskOrBlock::Block(block) => {
+                    // Check if block should run based on tags
+                    if !tag_filter.should_run(&block.tags) {
                         if self.config.verbose {
                             let block_name = block.name.as_deref().unwrap_or("Block");
-                            self.output.lock().print_task_header(&format!("{} (skipped by condition)", block_name));
+                            self.output
+                                .lock()
+                                .print_task_header(&format!("{} (skipped by tags)", block_name));
                         }
                         continue;
                     }
-                }
 
-                // Execute block
-                let block_failed = self
-                    .execute_block(
-                        block,
-                        hosts,
-                        vars,
-                        use_sudo,
-                        sudo_user,
-                        tag_filter,
-                        handler_registry,
-                        recap,
-                    )
-                    .await?;
+                    // Check when condition for block
+                    if let Some(ref when) = block.when {
+                        // Create a temporary context for the when evaluation
+                        let ctx = ExecutionContext::new(Arc::new(hosts[0].clone()), vars.clone());
+                        let result = evaluate_expression(when, &ctx)?;
+                        if !result.is_truthy() {
+                            if self.config.verbose {
+                                let block_name = block.name.as_deref().unwrap_or("Block");
+                                self.output.lock().print_task_header(&format!(
+                                    "{} (skipped by condition)",
+                                    block_name
+                                ));
+                            }
+                            continue;
+                        }
+                    }
 
-                if block_failed {
-                    return Ok(true);
+                    // Execute block
+                    let block_failed = self
+                        .execute_block(
+                            block,
+                            hosts,
+                            vars,
+                            use_sudo,
+                            sudo_user,
+                            tag_filter,
+                            handler_registry,
+                            recap,
+                        )
+                        .await?;
+
+                    if block_failed {
+                        return Ok(true);
+                    }
                 }
-            }
             }
         }
 
@@ -762,7 +799,9 @@ impl Scheduler {
 
         // Print block header
         if self.config.verbose {
-            self.output.lock().print_task_header(&format!("BLOCK: {}", block_name));
+            self.output
+                .lock()
+                .print_task_header(&format!("BLOCK: {}", block_name));
         }
 
         let mut block_failed = false;
@@ -773,7 +812,9 @@ impl Scheduler {
             // Check if task should run based on tags
             if !tag_filter.should_run(&task.tags) {
                 if self.config.verbose {
-                    self.output.lock().print_task_header(&format!("{} (skipped by tags)", task.name));
+                    self.output
+                        .lock()
+                        .print_task_header(&format!("{} (skipped by tags)", task.name));
                 }
                 continue;
             }
@@ -812,7 +853,9 @@ impl Scheduler {
         // Execute rescue tasks if block failed
         if block_failed && !block.rescue.is_empty() {
             if self.config.verbose {
-                self.output.lock().print_task_header(&format!("RESCUE: {}", block_name));
+                self.output
+                    .lock()
+                    .print_task_header(&format!("RESCUE: {}", block_name));
             }
 
             // Add failed task info to vars for rescue tasks
@@ -821,14 +864,19 @@ impl Scheduler {
                 let mut nexus_failed_task = HashMap::new();
                 nexus_failed_task.insert("task".to_string(), Value::String(task_name));
                 nexus_failed_task.insert("message".to_string(), Value::String(error_msg));
-                rescue_vars.insert("nexus_failed_task".to_string(), Value::Dict(nexus_failed_task));
+                rescue_vars.insert(
+                    "nexus_failed_task".to_string(),
+                    Value::Dict(nexus_failed_task),
+                );
             }
 
             // Execute rescue tasks
             for task in &block.rescue {
                 if !tag_filter.should_run(&task.tags) {
                     if self.config.verbose {
-                        self.output.lock().print_task_header(&format!("{} (skipped by tags)", task.name));
+                        self.output
+                            .lock()
+                            .print_task_header(&format!("{} (skipped by tags)", task.name));
                     }
                     continue;
                 }
@@ -860,7 +908,8 @@ impl Scheduler {
                             tag_filter,
                             handler_registry,
                             recap,
-                        ).await?;
+                        )
+                        .await?;
                         return Ok(true);
                     }
                 }
@@ -881,7 +930,8 @@ impl Scheduler {
                 tag_filter,
                 handler_registry,
                 recap,
-            ).await?;
+            )
+            .await?;
         }
 
         Ok(block_failed)
@@ -911,7 +961,9 @@ impl Scheduler {
         for task in always_tasks {
             if !tag_filter.should_run(&task.tags) {
                 if self.config.verbose {
-                    self.output.lock().print_task_header(&format!("{} (skipped by tags)", task.name));
+                    self.output
+                        .lock()
+                        .print_task_header(&format!("{} (skipped by tags)", task.name));
                 }
                 continue;
             }
@@ -960,7 +1012,10 @@ impl Scheduler {
                     // Handler was notified but not defined - this is an error
                     return Err(NexusError::Runtime {
                         function: None,
-                        message: format!("Handler '{}' was notified but is not defined", handler_name),
+                        message: format!(
+                            "Handler '{}' was notified but is not defined",
+                            handler_name
+                        ),
                         suggestion: Some("Define the handler in the handlers section".to_string()),
                     });
                 }
@@ -1008,12 +1063,20 @@ impl Scheduler {
 
             // Callback: handler start for each host
             for host in &notified_hosts {
-                self.callbacks.on_handler_start(&host.name, &handler.name).await;
+                self.callbacks
+                    .on_handler_start(&host.name, &handler.name)
+                    .await;
             }
 
             // Execute handler on notified hosts
             let results = self
-                .execute_task_on_hosts(&task, &notified_hosts, playbook_vars, playbook_sudo, playbook_sudo_user)
+                .execute_task_on_hosts(
+                    &task,
+                    &notified_hosts,
+                    playbook_vars,
+                    playbook_sudo,
+                    playbook_sudo_user,
+                )
                 .await?;
 
             // Callback: handler complete for each result
@@ -1031,7 +1094,9 @@ impl Scheduler {
                         data: HashMap::new(),
                         diff: result.diff.clone(),
                     };
-                    self.callbacks.on_handler_complete(&result.host, &handler.name, &output).await;
+                    self.callbacks
+                        .on_handler_complete(&result.host, &handler.name, &output)
+                        .await;
                 }
             }
 
@@ -1055,7 +1120,13 @@ impl Scheduler {
         handler_registry: &HandlerRegistry,
     ) -> Result<Vec<TaskResult>, NexusError> {
         let results = self
-            .execute_task_on_hosts(task, hosts, playbook_vars, playbook_sudo, playbook_sudo_user)
+            .execute_task_on_hosts(
+                task,
+                hosts,
+                playbook_vars,
+                playbook_sudo,
+                playbook_sudo_user,
+            )
             .await?;
 
         // Track handler notifications for hosts where task changed
@@ -1114,7 +1185,8 @@ impl Scheduler {
                 let sudo_user = sudo_user.clone();
 
                 // Get or create context for this host (preserves registered vars across tasks)
-                let ctx = self.get_or_create_context(&host, playbook_vars)
+                let ctx = self
+                    .get_or_create_context(&host, playbook_vars)
                     .with_check_mode(check_mode)
                     .with_diff_mode(diff_mode)
                     .with_sudo(sudo, sudo_user.clone());
@@ -1155,34 +1227,55 @@ impl Scheduler {
                                     emitter.task_skipped(host.name.clone(), task.name.clone());
                                 } else if output.failed {
                                     let error = output.message.as_deref().unwrap_or("task failed");
-                                    emitter.task_failed(host.name.clone(), task.name.clone(), error.to_string());
+                                    emitter.task_failed(
+                                        host.name.clone(),
+                                        task.name.clone(),
+                                        error.to_string(),
+                                    );
                                 } else {
                                     let status: TaskStatus = (&tr).into();
-                                    emitter.task_complete(host.name.clone(), task.name.clone(), status, duration);
+                                    emitter.task_complete(
+                                        host.name.clone(),
+                                        task.name.clone(),
+                                        status,
+                                        duration,
+                                    );
                                 }
                             }
 
                             // Callback: task complete
                             if output.skipped {
-                                callbacks.on_task_skipped(&host.name, &task.name, "condition not met").await;
+                                callbacks
+                                    .on_task_skipped(&host.name, &task.name, "condition not met")
+                                    .await;
                             } else if output.failed {
                                 let error = output.message.as_deref().unwrap_or("task failed");
-                                callbacks.on_task_failed(&host.name, &task.name, error).await;
+                                callbacks
+                                    .on_task_failed(&host.name, &task.name, error)
+                                    .await;
                             } else {
-                                callbacks.on_task_complete(&host.name, &task.name, &output, duration).await;
+                                callbacks
+                                    .on_task_complete(&host.name, &task.name, &output, duration)
+                                    .await;
                             }
 
                             tr
-                        },
+                        }
                         Err(e) => {
                             let error_msg = e.to_string();
 
                             // Emit task failed event
                             if let Some(ref emitter) = emitter {
-                                emitter.task_failed(host.name.clone(), task.name.clone(), error_msg.clone());
+                                emitter.task_failed(
+                                    host.name.clone(),
+                                    task.name.clone(),
+                                    error_msg.clone(),
+                                );
                             }
 
-                            callbacks.on_task_failed(&host.name, &task.name, &error_msg).await;
+                            callbacks
+                                .on_task_failed(&host.name, &task.name, &error_msg)
+                                .await;
 
                             TaskResult {
                                 host: host.name.clone(),
@@ -1196,7 +1289,7 @@ impl Scheduler {
                                 duration,
                                 diff: None,
                             }
-                        },
+                        }
                     };
 
                     task_result
@@ -1232,7 +1325,13 @@ impl Scheduler {
             // Execute ready tasks in parallel across hosts
             for node in ready {
                 let results = self
-                    .execute_task_on_hosts(&node.task, hosts, playbook_vars, playbook_sudo, playbook_sudo_user)
+                    .execute_task_on_hosts(
+                        &node.task,
+                        hosts,
+                        playbook_vars,
+                        playbook_sudo,
+                        playbook_sudo_user,
+                    )
                     .await?;
 
                 // Check for failures
@@ -1266,10 +1365,9 @@ impl Scheduler {
         let batches = calculate_batches(all_hosts, serial);
 
         if self.config.verbose {
-            self.output.lock().print_task_header(&format!(
-                "SERIAL EXECUTION: {} batch(es)",
-                batches.len()
-            ));
+            self.output
+                .lock()
+                .print_task_header(&format!("SERIAL EXECUTION: {} batch(es)", batches.len()));
         }
 
         // Collect all handlers
@@ -1297,16 +1395,18 @@ impl Scheduler {
             }
 
             if !playbook.pre_tasks.is_empty() {
-                let failed = self.execute_task_list(
-                    &playbook.pre_tasks,
-                    batch,
-                    &effective_vars,
-                    use_sudo,
-                    &playbook.sudo_user,
-                    &tag_filter,
-                    &handler_registry,
-                    &mut recap,
-                ).await?;
+                let failed = self
+                    .execute_task_list(
+                        &playbook.pre_tasks,
+                        batch,
+                        &effective_vars,
+                        use_sudo,
+                        &playbook.sudo_user,
+                        &tag_filter,
+                        &handler_registry,
+                        &mut recap,
+                    )
+                    .await?;
 
                 if failed {
                     recap.total_duration = start_time.elapsed();
@@ -1317,16 +1417,18 @@ impl Scheduler {
 
             // Execute main tasks
             if !playbook.tasks.is_empty() {
-                let failed = self.execute_task_list(
-                    &playbook.tasks,
-                    batch,
-                    &effective_vars,
-                    use_sudo,
-                    &playbook.sudo_user,
-                    &tag_filter,
-                    &handler_registry,
-                    &mut recap,
-                ).await?;
+                let failed = self
+                    .execute_task_list(
+                        &playbook.tasks,
+                        batch,
+                        &effective_vars,
+                        use_sudo,
+                        &playbook.sudo_user,
+                        &tag_filter,
+                        &handler_registry,
+                        &mut recap,
+                    )
+                    .await?;
 
                 if failed {
                     recap.total_duration = start_time.elapsed();
@@ -1341,16 +1443,18 @@ impl Scheduler {
             }
 
             if !playbook.post_tasks.is_empty() {
-                let failed = self.execute_task_list(
-                    &playbook.post_tasks,
-                    batch,
-                    &effective_vars,
-                    use_sudo,
-                    &playbook.sudo_user,
-                    &tag_filter,
-                    &handler_registry,
-                    &mut recap,
-                ).await?;
+                let failed = self
+                    .execute_task_list(
+                        &playbook.post_tasks,
+                        batch,
+                        &effective_vars,
+                        use_sudo,
+                        &playbook.sudo_user,
+                        &tag_filter,
+                        &handler_registry,
+                        &mut recap,
+                    )
+                    .await?;
 
                 if failed {
                     recap.total_duration = start_time.elapsed();
@@ -1366,7 +1470,14 @@ impl Scheduler {
                 }
 
                 let handler_results = self
-                    .execute_handlers(&all_handlers, batch, &effective_vars, use_sudo, &playbook.sudo_user, &handler_registry)
+                    .execute_handlers(
+                        &all_handlers,
+                        batch,
+                        &effective_vars,
+                        use_sudo,
+                        &playbook.sudo_user,
+                        &handler_registry,
+                    )
                     .await?;
 
                 for result in handler_results {
@@ -1398,12 +1509,18 @@ fn calculate_batches<'a>(hosts: &[&'a Host], serial: &Serial) -> Vec<Vec<&'a Hos
         Serial::Count(n) => {
             // Fixed batch size
             let batch_size = (*n).min(total_hosts);
-            hosts.chunks(batch_size).map(|chunk| chunk.to_vec()).collect()
+            hosts
+                .chunks(batch_size)
+                .map(|chunk| chunk.to_vec())
+                .collect()
         }
         Serial::Percentage(pct) => {
             // Percentage of hosts per batch
             let batch_size = ((total_hosts * (*pct as usize)) / 100).max(1);
-            hosts.chunks(batch_size).map(|chunk| chunk.to_vec()).collect()
+            hosts
+                .chunks(batch_size)
+                .map(|chunk| chunk.to_vec())
+                .collect()
         }
         Serial::List(sizes) => {
             // Progressive batches
@@ -1482,7 +1599,15 @@ async fn execute_single_task_with_retry(
         for (i, item) in items.into_iter().enumerate() {
             let loop_ctx = ctx.clone_for_task().with_loop_item(item, i);
 
-            let output = execute_task_body_with_retry(task, &loop_ctx, pool, modules, circuit_breakers, async_tracker).await?;
+            let output = execute_task_body_with_retry(
+                task,
+                &loop_ctx,
+                pool,
+                modules,
+                circuit_breakers,
+                async_tracker,
+            )
+            .await?;
 
             combined_output.changed = combined_output.changed || output.changed;
             combined_output.failed = combined_output.failed || output.failed;
@@ -1510,17 +1635,15 @@ async fn execute_task_body(
     pool: &ConnectionPool,
     modules: &ModuleExecutor,
 ) -> Result<TaskOutput, NexusError> {
-    use crate::modules::AnyConnection;
     use crate::executor::LocalConnection;
+    use crate::modules::AnyConnection;
 
     // Get appropriate connection type (SSH or local)
     let conn = match pool.get_connection_type(&ctx.host) {
         crate::executor::ssh::ConnectionType::Local => {
             AnyConnection::Local(LocalConnection::new(&ctx.host.name))
         }
-        crate::executor::ssh::ConnectionType::Ssh => {
-            AnyConnection::Ssh(pool.get(&ctx.host)?)
-        }
+        crate::executor::ssh::ConnectionType::Ssh => AnyConnection::Ssh(pool.get(&ctx.host)?),
     };
 
     // Execute the module
@@ -1618,7 +1741,9 @@ async fn execute_task_body_with_retry(
 
                 if is_success {
                     // Success - record to circuit breaker
-                    if let (Some(cb_config), Some(registry)) = (&retry_config.circuit_breaker, circuit_breakers) {
+                    if let (Some(cb_config), Some(registry)) =
+                        (&retry_config.circuit_breaker, circuit_breakers)
+                    {
                         let circuit = registry.get_or_create(cb_config);
                         circuit.write().record_success();
                     }
@@ -1627,7 +1752,9 @@ async fn execute_task_body_with_retry(
 
                 if !should_retry || attempt >= retry_config.attempts - 1 {
                     // No more retries - record failure to circuit breaker
-                    if let (Some(cb_config), Some(registry)) = (&retry_config.circuit_breaker, circuit_breakers) {
+                    if let (Some(cb_config), Some(registry)) =
+                        (&retry_config.circuit_breaker, circuit_breakers)
+                    {
                         let circuit = registry.get_or_create(cb_config);
                         circuit.write().record_failure();
                     }
@@ -1640,7 +1767,9 @@ async fn execute_task_body_with_retry(
                 last_error = e.to_string();
 
                 // Record failure to circuit breaker
-                if let (Some(cb_config), Some(registry)) = (&retry_config.circuit_breaker, circuit_breakers) {
+                if let (Some(cb_config), Some(registry)) =
+                    (&retry_config.circuit_breaker, circuit_breakers)
+                {
                     let circuit = registry.get_or_create(cb_config);
                     circuit.write().record_failure();
                 }
@@ -1713,8 +1842,7 @@ async fn execute_async_task(
 
     // Check mode - don't actually run
     if ctx.check_mode {
-        return Ok(TaskOutput::changed()
-            .with_stdout(format!("Would run async: {}", final_command)));
+        return Ok(TaskOutput::changed().with_stdout(format!("Would run async: {}", final_command)));
     }
 
     // Start the async job
@@ -1724,15 +1852,21 @@ async fn execute_async_task(
         suggestion: None,
     })?;
 
-    let job_id = tracker.start_job(&conn, &final_command, async_config.async_timeout).await?;
+    let job_id = tracker
+        .start_job(&conn, &final_command, async_config.async_timeout)
+        .await?;
 
     // Fire and forget mode (poll == 0)
     if async_config.poll == 0 {
         let mut output = TaskOutput::changed();
         output.stdout = format!("Async job started (fire and forget): {}", job_id);
-        output.data.insert("job_id".to_string(), Value::String(job_id));
+        output
+            .data
+            .insert("job_id".to_string(), Value::String(job_id));
         output.data.insert("started".to_string(), Value::Bool(true));
-        output.data.insert("finished".to_string(), Value::Bool(false));
+        output
+            .data
+            .insert("finished".to_string(), Value::Bool(false));
 
         // Register output if requested
         if let Some(ref var_name) = task.register {
@@ -1743,17 +1877,18 @@ async fn execute_async_task(
     }
 
     // Poll for completion
-    let result = tracker.poll_until_complete(
-        &conn,
-        &job_id,
-        async_config.poll,
-        async_config.retries,
-    ).await?;
+    let result = tracker
+        .poll_until_complete(&conn, &job_id, async_config.poll, async_config.retries)
+        .await?;
 
     // Add job_id to output data
     let mut final_output = result;
-    final_output.data.insert("job_id".to_string(), Value::String(job_id));
-    final_output.data.insert("finished".to_string(), Value::Bool(true));
+    final_output
+        .data
+        .insert("job_id".to_string(), Value::String(job_id));
+    final_output
+        .data
+        .insert("finished".to_string(), Value::Bool(true));
 
     // Register output if requested
     if let Some(ref var_name) = task.register {

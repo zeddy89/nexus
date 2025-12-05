@@ -80,8 +80,7 @@ pub enum TaskOrBlock {
 }
 
 /// Host targeting pattern
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum HostPattern {
     /// All hosts
     #[default]
@@ -90,8 +89,26 @@ pub enum HostPattern {
     Group(String),
     /// Multiple groups with intersection/union
     Pattern(String),
+    /// Inline host list defined in playbook (Nexus differentiator)
+    Inline(Vec<InlineHost>),
+    /// Special pattern for localhost-only execution
+    Localhost,
 }
 
+/// Inline host definition for playbook-embedded hosts
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineHost {
+    /// Host name/identifier
+    pub name: String,
+    /// IP address or hostname to connect to
+    pub address: Option<String>,
+    /// SSH port (default: 22)
+    pub port: Option<u16>,
+    /// SSH user
+    pub user: Option<String>,
+    /// Host-specific variables
+    pub vars: HashMap<String, Value>,
+}
 
 /// A single task in a playbook
 #[derive(Debug, Clone)]
@@ -340,10 +357,7 @@ pub enum ModuleCall {
         create_home: Option<bool>,
     },
     /// run: function_name()
-    RunFunction {
-        name: String,
-        args: Vec<Expression>,
-    },
+    RunFunction { name: String, args: Vec<Expression> },
     /// Template module
     Template {
         src: Expression,
@@ -353,8 +367,13 @@ pub enum ModuleCall {
         mode: Option<Expression>,
     },
     /// Facts gathering module
-    Facts {
-        categories: Vec<String>,
+    Facts { categories: Vec<String> },
+    /// Shell command - execute through /bin/sh -c
+    Shell {
+        command: Expression,
+        chdir: Option<Expression>,
+        creates: Option<Expression>,
+        removes: Option<Expression>,
     },
 }
 
@@ -370,6 +389,7 @@ impl ModuleCall {
             ModuleCall::RunFunction { .. } => "run",
             ModuleCall::Template { .. } => "template",
             ModuleCall::Facts { .. } => "facts",
+            ModuleCall::Shell { .. } => "shell",
         }
     }
 }
@@ -525,10 +545,7 @@ pub struct FunctionParam {
 #[derive(Debug, Clone)]
 pub enum Statement {
     /// Variable assignment: x = expr
-    Assign {
-        target: String,
-        value: Expression,
-    },
+    Assign { target: String, value: Expression },
     /// If statement
     If {
         condition: Expression,
@@ -723,7 +740,6 @@ pub enum Value {
     List(Vec<Value>),
     Dict(HashMap<String, Value>),
 }
-
 
 impl Value {
     pub fn is_truthy(&self) -> bool {

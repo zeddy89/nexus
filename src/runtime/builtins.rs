@@ -319,13 +319,16 @@ fn builtin_int(args: Vec<Value>) -> Result<Value, NexusError> {
     match &args[0] {
         Value::Int(i) => Ok(Value::Int(*i)),
         Value::Float(f) => Ok(Value::Int(*f as i64)),
-        Value::String(s) => s.trim().parse::<i64>().map(Value::Int).map_err(|_| {
-            NexusError::Runtime {
-                function: Some("int".to_string()),
-                message: format!("Cannot convert '{}' to int", s),
-                suggestion: None,
-            }
-        }),
+        Value::String(s) => {
+            s.trim()
+                .parse::<i64>()
+                .map(Value::Int)
+                .map_err(|_| NexusError::Runtime {
+                    function: Some("int".to_string()),
+                    message: format!("Cannot convert '{}' to int", s),
+                    suggestion: None,
+                })
+        }
         Value::Bool(b) => Ok(Value::Int(if *b { 1 } else { 0 })),
         _ => Err(arg_type_error("int", 0, "number/string", &args[0])),
     }
@@ -336,13 +339,16 @@ fn builtin_float(args: Vec<Value>) -> Result<Value, NexusError> {
     match &args[0] {
         Value::Int(i) => Ok(Value::Float(*i as f64)),
         Value::Float(f) => Ok(Value::Float(*f)),
-        Value::String(s) => s.trim().parse::<f64>().map(Value::Float).map_err(|_| {
-            NexusError::Runtime {
-                function: Some("float".to_string()),
-                message: format!("Cannot convert '{}' to float", s),
-                suggestion: None,
-            }
-        }),
+        Value::String(s) => {
+            s.trim()
+                .parse::<f64>()
+                .map(Value::Float)
+                .map_err(|_| NexusError::Runtime {
+                    function: Some("float".to_string()),
+                    message: format!("Cannot convert '{}' to float", s),
+                    suggestion: None,
+                })
+        }
         _ => Err(arg_type_error("float", 0, "number/string", &args[0])),
     }
 }
@@ -543,7 +549,11 @@ fn builtin_sorted(args: Vec<Value>, kwargs: HashMap<String, Value>) -> Result<Va
             let mut sorted = l.clone();
             sorted.sort_by(compare_for_sort);
 
-            if kwargs.get("reverse").map(|v| v.is_truthy()).unwrap_or(false) {
+            if kwargs
+                .get("reverse")
+                .map(|v| v.is_truthy())
+                .unwrap_or(false)
+            {
                 sorted.reverse();
             }
 
@@ -649,7 +659,11 @@ fn call_string_method(s: &str, method: &str, args: Vec<Value>) -> Result<Value, 
         }
         "join" => match args.first() {
             Some(Value::List(items)) => {
-                let joined: String = items.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(s);
+                let joined: String = items
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(s);
                 Ok(Value::String(joined))
             }
             _ => Err(NexusError::Runtime {
@@ -734,7 +748,10 @@ fn call_list_method(l: &[Value], method: &str, args: Vec<Value>) -> Result<Value
                 message: "count requires an argument".to_string(),
                 suggestion: None,
             })?;
-            let count = l.iter().filter(|v| v.to_string() == item.to_string()).count();
+            let count = l
+                .iter()
+                .filter(|v| v.to_string() == item.to_string())
+                .count();
             Ok(Value::Int(count as i64))
         }
         "reverse" => {
@@ -800,7 +817,12 @@ fn require_args(func: &str, args: &[Value], expected: usize) -> Result<(), Nexus
     if args.len() < expected {
         Err(NexusError::Runtime {
             function: Some(func.to_string()),
-            message: format!("{} requires {} argument(s), got {}", func, expected, args.len()),
+            message: format!(
+                "{} requires {} argument(s), got {}",
+                func,
+                expected,
+                args.len()
+            ),
             suggestion: None,
         })
     } else {

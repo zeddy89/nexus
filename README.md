@@ -1,115 +1,111 @@
 # Nexus
 
-**Next-Generation Infrastructure Automation**
+[![CI](https://github.com/zeddy89/nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/zeddy89/nexus/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 
-Nexus is a modern infrastructure automation tool written in Rust that addresses core limitations of Ansible while maintaining a familiar YAML-based playbook syntax. It's designed for speed, reliability, and sophisticated orchestration.
+**Next-generation infrastructure automation. Ansible, but faster and simpler.**
 
-## Key Features
+## Why Nexus?
 
-- **High Performance**: Built in Rust with async/await for true parallelism
-- **Familiar Syntax**: YAML playbooks similar to Ansible for easy migration
-- **Advanced Orchestration**: Circuit breakers, checkpoints, retry with backoff
-- **Terraform-style Planning**: Preview changes before applying (`nexus plan`)
-- **Live TUI Dashboard**: Real-time execution monitoring
-- **Vault Encryption**: Secure secrets with AES-256-GCM
-- **Rich Expression Language**: Variables, filters, functions, and conditionals
+If you've used Ansible, you know these pain points:
 
-## Quick Start
+- **Slow execution** — Python's multiprocessing can't match true async parallelism
+- **Verbose YAML** — Simple tasks require too much boilerplate
+- **Inventory overhead** — Sometimes you just want to run against a few hosts
+- **No dry-run preview** — You can't see what will change before running
 
-```bash
-# Build from source
-cargo build --release
+Nexus fixes all of these with a fast Rust runtime and streamlined syntax.
 
-# Validate a playbook
-./target/release/nexus validate examples/01-hello-world.nx.yaml
+## Installation
 
-# Run a playbook
-./target/release/nexus run examples/01-hello-world.nx.yaml -i examples/inventory.yaml
-
-# Preview changes (Terraform-style)
-./target/release/nexus plan examples/05-webserver-setup.nx.yaml -i examples/inventory.yaml
-
-# Run with live TUI dashboard
-./target/release/nexus run playbook.nx.yaml -i inventory.yaml --tui
+```sh
+curl -fsSL https://raw.githubusercontent.com/zeddy89/nexus/main/scripts/install.sh | sh
 ```
 
-## Documentation
+Or install with Cargo:
 
-- [Getting Started](docs/getting-started.md) - Installation and first playbook
-- [Playbook Syntax](docs/playbook-syntax.md) - Complete playbook reference
-- [Modules Reference](docs/modules.md) - Built-in module documentation
-- [Inventory Guide](docs/inventory.md) - Static and dynamic inventory
-- [CLI Reference](docs/cli.md) - All command-line options
-- [Advanced Features](docs/advanced-features.md) - Vault, checkpoints, roles, and more
+```sh
+cargo install nexus
+```
 
-## Example Playbook
+## Quick Example
 
 ```yaml
 # webserver.nx.yaml
 hosts: webservers
 
-vars:
-  http_port: 80
-  document_root: /var/www/html
-
 tasks:
-  - name: Install nginx
-    package: nginx
-    state: installed
-    sudo: true
-
-  - name: Start nginx
-    service: nginx
-    state: running
-    enabled: true
-    sudo: true
-
-  - name: Deploy index page
-    file: ${vars.document_root}/index.html
-    content: |
-      <h1>Hello from ${host.name}!</h1>
-    sudo: true
-    notify: reload_nginx
+  - package: install nginx
+  - service: enable nginx --now
+  - firewall: allow http https
+  - template: templates/nginx.conf -> /etc/nginx/nginx.conf
+    notify: reload nginx
 
 handlers:
-  - name: reload_nginx
-    service: nginx
-    state: reloaded
-    sudo: true
+  - service: reload nginx
 ```
 
-## Why Nexus?
+Run it:
 
-| Feature | Ansible | Nexus |
-|---------|---------|-------|
-| Language | Python | Rust |
-| Parallelism | Multi-process | Async/await |
-| Execution Planning | Limited | Terraform-style |
-| Checkpoint/Resume | No | Yes |
-| Circuit Breakers | No | Yes |
-| Live TUI | No | Yes |
-| Connection Pooling | Limited | Built-in |
+```sh
+nexus run webserver.nx.yaml -i inventory.yaml
 
-## Project Structure
+# Or without an inventory file
+nexus run webserver.nx.yaml --hosts "web1,web2,web3"
 
+# Preview changes first (like terraform plan)
+nexus plan webserver.nx.yaml -i inventory.yaml
 ```
-nexus/
-├── src/
-│   ├── main.rs          # CLI entry point
-│   ├── lib.rs           # Library exports
-│   ├── parser/          # Playbook parsing (YAML, expressions)
-│   ├── executor/        # Task execution engine
-│   ├── modules/         # Built-in modules (package, service, file, etc.)
-│   ├── inventory/       # Host and group management
-│   ├── output/          # Terminal, JSON, and TUI output
-│   ├── runtime/         # Expression evaluation
-│   ├── vault/           # Secret encryption
-│   └── plugins/         # Callbacks and lookups
-├── examples/            # Example playbooks and inventory
-├── docs/                # Documentation
-└── tests/               # Integration tests
+
+## Smart Actions Syntax
+
+Nexus uses a natural, human-readable syntax:
+
+```yaml
+tasks:
+  # Package management
+  - package: install nginx vim git
+  - package: remove apache2
+
+  # Service control
+  - service: enable nginx --now
+  - service: restart postgresql
+
+  # Firewall rules
+  - firewall: allow http https ssh
+  - firewall: allow 8080/tcp
+
+  # File operations
+  - file: create /etc/app/config.yaml
+    content: |
+      setting: value
+    mode: "0644"
+
+  - template: templates/app.conf -> /etc/app/app.conf
+
+  # Commands
+  - command: /usr/bin/myapp --init
+  - shell: cat /etc/hosts | grep webserver
 ```
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Async Execution** | True parallelism with Rust's async runtime |
+| **Smart Actions** | Natural syntax like `package: install nginx` |
+| **Inventory-less Mode** | Run with `--hosts` — no inventory file needed |
+| **Execution Planning** | Preview changes with `nexus plan` |
+| **Network Discovery** | Scan subnets with `nexus discover` |
+| **Ansible Migration** | Convert playbooks with `nexus convert` |
+| **Live TUI Dashboard** | Real-time monitoring with `--tui` |
+| **Checkpoint/Resume** | Resume failed runs from where they stopped |
+| **Vault Encryption** | AES-256-GCM encrypted secrets |
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT License - see LICENSE file for details.
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.

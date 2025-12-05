@@ -189,10 +189,7 @@ impl TerminalOutput {
 
         // Print overall timing
         println!();
-        println!(
-            "Total time: {:.2}s",
-            recap.total_duration.as_secs_f64()
-        );
+        println!("Total time: {:.2}s", recap.total_duration.as_secs_f64());
     }
 
     /// Print streaming output from a command
@@ -266,7 +263,11 @@ impl TaskResult {
         }
     }
 
-    pub fn failed(host: impl Into<String>, task_name: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn failed(
+        host: impl Into<String>,
+        task_name: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         TaskResult {
             host: host.into(),
             task_name: task_name.into(),

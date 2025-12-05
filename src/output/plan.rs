@@ -1,7 +1,7 @@
 // Plan display formatter - Terraform-style execution plan output
 
-use std::collections::HashMap;
 use colored::*;
+use std::collections::HashMap;
 
 use crate::executor::{ChangeType, ExecutionPlan, HostPlan};
 
@@ -139,19 +139,34 @@ fn display_summary(plan: &ExecutionPlan) {
     let mut parts = Vec::new();
 
     if plan.creates > 0 {
-        parts.push(format!("{} create", "+".green().to_string() + &plan.creates.to_string()));
+        parts.push(format!(
+            "{} create",
+            "+".green().to_string() + &plan.creates.to_string()
+        ));
     }
     if plan.modifies > 0 {
-        parts.push(format!("{} modify", "~".yellow().to_string() + &plan.modifies.to_string()));
+        parts.push(format!(
+            "{} modify",
+            "~".yellow().to_string() + &plan.modifies.to_string()
+        ));
     }
     if plan.removes > 0 {
-        parts.push(format!("{} remove", "-".red().to_string() + &plan.removes.to_string()));
+        parts.push(format!(
+            "{} remove",
+            "-".red().to_string() + &plan.removes.to_string()
+        ));
     }
     if plan.no_changes > 0 {
-        parts.push(format!("{} unchanged", "✓".dimmed().to_string() + &plan.no_changes.to_string()));
+        parts.push(format!(
+            "{} unchanged",
+            "✓".dimmed().to_string() + &plan.no_changes.to_string()
+        ));
     }
     if plan.warnings > 0 {
-        parts.push(format!("{} warnings", "!".red().bold().to_string() + &plan.warnings.to_string()));
+        parts.push(format!(
+            "{} warnings",
+            "!".red().bold().to_string() + &plan.warnings.to_string()
+        ));
     }
 
     println!("{} {}", "Summary:".bold(), parts.join(", "));
@@ -179,13 +194,25 @@ fn format_duration(duration: std::time::Duration) -> String {
     let mut parts = Vec::new();
 
     if hours > 0 {
-        parts.push(format!("{} hour{}", hours, if hours > 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{} hour{}",
+            hours,
+            if hours > 1 { "s" } else { "" }
+        ));
     }
     if minutes > 0 {
-        parts.push(format!("{} minute{}", minutes, if minutes > 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{} minute{}",
+            minutes,
+            if minutes > 1 { "s" } else { "" }
+        ));
     }
     if seconds > 0 || parts.is_empty() {
-        parts.push(format!("{} second{}", seconds, if seconds > 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{} second{}",
+            seconds,
+            if seconds > 1 { "s" } else { "" }
+        ));
     }
 
     format!("~{}", parts.join(", "))
@@ -215,10 +242,25 @@ mod tests {
 
     #[test]
     fn test_format_duration() {
-        assert_eq!(format_duration(std::time::Duration::from_secs(0)), "< 1 second");
-        assert_eq!(format_duration(std::time::Duration::from_secs(5)), "~5 seconds");
-        assert_eq!(format_duration(std::time::Duration::from_secs(60)), "~1 minute");
-        assert_eq!(format_duration(std::time::Duration::from_secs(90)), "~1 minute, 30 seconds");
-        assert_eq!(format_duration(std::time::Duration::from_secs(3661)), "~1 hour, 1 minute, 1 second");
+        assert_eq!(
+            format_duration(std::time::Duration::from_secs(0)),
+            "< 1 second"
+        );
+        assert_eq!(
+            format_duration(std::time::Duration::from_secs(5)),
+            "~5 seconds"
+        );
+        assert_eq!(
+            format_duration(std::time::Duration::from_secs(60)),
+            "~1 minute"
+        );
+        assert_eq!(
+            format_duration(std::time::Duration::from_secs(90)),
+            "~1 minute, 30 seconds"
+        );
+        assert_eq!(
+            format_duration(std::time::Duration::from_secs(3661)),
+            "~1 hour, 1 minute, 1 second"
+        );
     }
 }

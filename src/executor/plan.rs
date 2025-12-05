@@ -7,7 +7,9 @@ use crate::executor::ExecutionContext;
 use crate::inventory::Inventory;
 use crate::modules::{AnyConnection, ModuleExecutor};
 use crate::output::errors::NexusError;
-use crate::parser::ast::{FileState, ModuleCall, PackageState, Playbook, ServiceState, Task, TaskOrBlock, UserState};
+use crate::parser::ast::{
+    FileState, ModuleCall, PackageState, Playbook, ServiceState, Task, TaskOrBlock, UserState,
+};
 use crate::runtime::evaluate_expression;
 
 /// Type of change being planned
@@ -162,9 +164,7 @@ impl PlanGenerator {
                 // Match against hostname or pattern
                 if limit_pattern.contains('*') || limit_pattern.contains('?') {
                     // Wildcard pattern matching
-                    let pattern = limit_pattern
-                        .replace('*', ".*")
-                        .replace('?', ".");
+                    let pattern = limit_pattern.replace('*', ".*").replace('?', ".");
                     if let Ok(re) = regex::Regex::new(&format!("^{}$", pattern)) {
                         re.is_match(&host.name)
                     } else {
@@ -172,7 +172,8 @@ impl PlanGenerator {
                     }
                 } else if limit_pattern.contains(',') {
                     // Comma-separated list of hosts
-                    limit_pattern.split(',')
+                    limit_pattern
+                        .split(',')
                         .map(str::trim)
                         .any(|h| h == host.name)
                 } else {
@@ -185,8 +186,8 @@ impl PlanGenerator {
         let mut host_plans = Vec::new();
 
         // Create connection pool
-        let mut pool = crate::executor::ConnectionPool::new()
-            .with_connect_timeout(Duration::from_secs(30));
+        let mut pool =
+            crate::executor::ConnectionPool::new().with_connect_timeout(Duration::from_secs(30));
 
         if let Some(user) = &ssh_config.user {
             pool = pool.with_default_user(user.clone());
@@ -213,9 +214,7 @@ impl PlanGenerator {
                     let ctx = ExecutionContext::new(Arc::new(host.clone()), playbook.vars.clone());
 
                     // Check state for this task
-                    let planned = self
-                        .check_task_state(task, &ctx, &conn, &host.name)
-                        .await?;
+                    let planned = self.check_task_state(task, &ctx, &conn, &host.name).await?;
 
                     if let Some(change) = planned {
                         total_duration += estimate_task_duration(&task.module, change.change_type);
@@ -231,10 +230,7 @@ impl PlanGenerator {
             });
         }
 
-        Ok(ExecutionPlan::new(
-            playbook.source_file.clone(),
-            host_plans,
-        ))
+        Ok(ExecutionPlan::new(playbook.source_file.clone(), host_plans))
     }
 
     /// Check the state for a single task
@@ -311,17 +307,15 @@ impl PlanGenerator {
         match &task.module {
             ModuleCall::Package { name, state } => {
                 let name_val = evaluate_expression(name, ctx)?;
-                self.check_package_state(
-                    conn,
-                    host,
-                    &name_val.to_string(),
-                    *state,
-                    &task.name,
-                )
-                .await
+                self.check_package_state(conn, host, &name_val.to_string(), *state, &task.name)
+                    .await
             }
 
-            ModuleCall::Service { name, state, enabled } => {
+            ModuleCall::Service {
+                name,
+                state,
+                enabled,
+            } => {
                 let name_val = evaluate_expression(name, ctx)?;
                 self.check_service_state(
                     conn,
@@ -606,12 +600,14 @@ impl PlanGenerator {
                             )
                         } else {
                             // Generate diff
-                            let diff_str = old_content.map(|old| crate::output::diff::generate_unified_diff(
+                            let diff_str = old_content.map(|old| {
+                                crate::output::diff::generate_unified_diff(
                                     &old,
                                     new_content,
                                     &format!("{} (current)", path),
                                     &format!("{} (desired)", path),
-                                ));
+                                )
+                            });
 
                             (
                                 ChangeType::Modify,
@@ -682,12 +678,7 @@ impl PlanGenerator {
                     )
                 }
             }
-            _ => (
-                ChangeType::Unknown,
-                None,
-                None,
-                None,
-            ),
+            _ => (ChangeType::Unknown, None, None, None),
         };
 
         Ok(PlannedChange {

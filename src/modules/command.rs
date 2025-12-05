@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use super::Module;
-use crate::executor::{ExecutionContext, Connection, SshConnection, TaskOutput};
+use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
 use crate::output::errors::NexusError;
 
 pub struct CommandModule;
@@ -41,7 +41,10 @@ impl CommandModule {
 
         // Check 'creates' condition - skip if file exists
         if let Some(ref creates_path) = creates {
-            let exists = conn.exec(&format!("test -e '{}'", creates_path)).await?.success();
+            let exists = conn
+                .exec(&format!("test -e '{}'", creates_path))
+                .await?
+                .success();
             if exists {
                 return Ok(TaskOutput::success()
                     .with_stdout(format!("Skipped - {} already exists", creates_path)));
@@ -50,7 +53,10 @@ impl CommandModule {
 
         // Check 'removes' condition - skip if file doesn't exist
         if let Some(ref removes_path) = removes {
-            let exists = conn.exec(&format!("test -e '{}'", removes_path)).await?.success();
+            let exists = conn
+                .exec(&format!("test -e '{}'", removes_path))
+                .await?
+                .success();
             if !exists {
                 return Ok(TaskOutput::success()
                     .with_stdout(format!("Skipped - {} does not exist", removes_path)));
@@ -69,10 +75,8 @@ impl CommandModule {
                 .with_stderr(result.stderr))
         } else {
             // Return failure but include output
-            let mut output = TaskOutput::failed(format!(
-                "Command exited with code {}",
-                result.exit_code
-            ));
+            let mut output =
+                TaskOutput::failed(format!("Command exited with code {}", result.exit_code));
             output.stdout = result.stdout;
             output.stderr = result.stderr;
             output.exit_code = result.exit_code;
@@ -90,14 +94,15 @@ impl CommandModule {
         on_stderr: Box<dyn Fn(String) + Send + Sync>,
     ) -> Result<TaskOutput, NexusError> {
         if ctx.check_mode {
-            return Ok(TaskOutput::changed()
-                .with_stdout(format!("Would run: {}", command)));
+            return Ok(TaskOutput::changed().with_stdout(format!("Would run: {}", command)));
         }
 
         // Wrap command with sudo if needed
         let final_command = ctx.wrap_command(command);
 
-        let result = conn.exec_streaming(&final_command, on_stdout, on_stderr).await?;
+        let result = conn
+            .exec_streaming(&final_command, on_stdout, on_stderr)
+            .await?;
 
         if result.exit_code == 0 {
             Ok(TaskOutput::changed())
@@ -192,7 +197,9 @@ impl ShellCommand {
 #[allow(dead_code)]
 fn shell_quote(s: &str) -> String {
     // If the string only contains safe characters, return as-is
-    if s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '.') {
+    if s.chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '.')
+    {
         return s.to_string();
     }
 
@@ -213,16 +220,10 @@ mod tests {
 
     #[test]
     fn test_shell_command_builder() {
-        let cmd = ShellCommand::new("echo")
-            .arg("hello")
-            .arg("world")
-            .build();
+        let cmd = ShellCommand::new("echo").arg("hello").arg("world").build();
         assert_eq!(cmd, "echo hello world");
 
-        let cmd = ShellCommand::new("ls")
-            .cwd("/tmp")
-            .arg("-la")
-            .build();
+        let cmd = ShellCommand::new("ls").cwd("/tmp").arg("-la").build();
         assert_eq!(cmd, "cd /tmp && ls -la");
 
         let cmd = ShellCommand::new("npm")
