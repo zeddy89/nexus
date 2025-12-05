@@ -336,11 +336,12 @@ fn get_bool(value: &Value, key: &str) -> Option<bool> {
 
 fn convert_package_module(args: &Value) -> Result<ModuleConversionResult, String> {
     // Handle 'list' parameter (dnf list updates, yum list installed, etc.)
+    // This is a query operation, convert to shell command
     if let Some(list_type) = get_str(args, "list") {
         return Ok(ModuleConversionResult {
-            action_line: format!("package: list {}", list_type),
+            action_line: format!("shell: dnf list {} -q 2>/dev/null || yum list {} -q 2>/dev/null", list_type, list_type),
             additional_lines: vec![],
-            warnings: vec![],
+            warnings: vec!["Converted package list to shell command - output format may differ".to_string()],
         });
     }
 
