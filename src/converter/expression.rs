@@ -197,47 +197,83 @@ impl ExpressionConverter {
         // Match variable paths like: my_var, result.stdout, foo.bar.baz
         let defined_re = Regex::new(r"([\w.]+)\s+is\s+defined").unwrap();
         output = defined_re
-            .replace_all(&output, "$${$1 != null}")
+            .replace_all(&output, "$1 != null")
             .to_string();
 
         let not_defined_re = Regex::new(r"([\w.]+)\s+is\s+not\s+defined").unwrap();
         output = not_defined_re
-            .replace_all(&output, "$${$1 == null}")
+            .replace_all(&output, "$1 == null")
             .to_string();
 
         // Handle "result is changed/failed/success"
-        let changed_re = Regex::new(r"(\w+)\s+is\s+changed").unwrap();
-        output = changed_re
-            .replace_all(&output, "$${$1.changed}")
-            .to_string();
+        let changed_re = Regex::new(r"([\w.]+)\s+is\s+changed").unwrap();
+        output = changed_re.replace_all(&output, "$1.changed").to_string();
 
-        let failed_re = Regex::new(r"(\w+)\s+is\s+failed").unwrap();
-        output = failed_re.replace_all(&output, "$${$1.failed}").to_string();
+        let failed_re = Regex::new(r"([\w.]+)\s+is\s+failed").unwrap();
+        output = failed_re.replace_all(&output, "$1.failed").to_string();
 
-        let success_re = Regex::new(r"(\w+)\s+is\s+success").unwrap();
-        output = success_re.replace_all(&output, "$${$1.ok}").to_string();
+        let success_re = Regex::new(r"([\w.]+)\s+is\s+success").unwrap();
+        output = success_re.replace_all(&output, "$1.ok").to_string();
 
-        let skipped_re = Regex::new(r"(\w+)\s+is\s+skipped").unwrap();
-        output = skipped_re
-            .replace_all(&output, "$${$1.skipped}")
-            .to_string();
+        let skipped_re = Regex::new(r"([\w.]+)\s+is\s+skipped").unwrap();
+        output = skipped_re.replace_all(&output, "$1.skipped").to_string();
 
         // Handle "is search" and "is match"
-        let search_re = Regex::new(r"(\w+)\s+is\s+search\('(.+?)'\)").unwrap();
+        let search_re = Regex::new(r"([\w.]+)\s+is\s+search\('(.+?)'\)").unwrap();
         output = search_re
-            .replace_all(&output, "$${$1.contains('$2')}")
+            .replace_all(&output, "$1.contains('$2')")
             .to_string();
 
-        let match_re = Regex::new(r"(\w+)\s+is\s+match\('(.+?)'\)").unwrap();
+        let match_re = Regex::new(r"([\w.]+)\s+is\s+match\('(.+?)'\)").unwrap();
         output = match_re
-            .replace_all(&output, "$${$1.matches('$2')}")
+            .replace_all(&output, "$1.matches('$2')")
             .to_string();
 
-        // Convert any remaining Jinja2 expressions
+        // Convert Jinja2 filters in conditions
+        // Handle "var | length" -> "var.len()"
+        let length_re = Regex::new(r"([\w.]+)\s*\|\s*length").unwrap();
+        output = length_re.replace_all(&output, "$1.len()").to_string();
+
+        // Handle "var | int" -> "var.to_int()"
+        let int_re = Regex::new(r"([\w.]+)\s*\|\s*int").unwrap();
+        output = int_re.replace_all(&output, "$1.to_int()").to_string();
+
+        // Handle "var | string" -> "var.to_string()"
+        let string_re = Regex::new(r"([\w.]+)\s*\|\s*string").unwrap();
+        output = string_re.replace_all(&output, "$1.to_string()").to_string();
+
+        // Handle "var | bool" -> "var.to_bool()"
+        let bool_re = Regex::new(r"([\w.]+)\s*\|\s*bool").unwrap();
+        output = bool_re.replace_all(&output, "$1.to_bool()").to_string();
+
+        // Handle "var | default(val)" -> "(var ?? val)"
+        let default_re = Regex::new(r"([\w.]+)\s*\|\s*default\(([^)]+)\)").unwrap();
+        output = default_re.replace_all(&output, "($1 ?? $2)").to_string();
+
+        // Convert boolean operators
+        output = output.replace(" and ", " && ");
+        output = output.replace(" or ", " || ");
+        output = output.replace(" not ", " !");
+
+        // Convert any remaining Jinja2 {{ }} expressions
         let result = self.convert_string(&output);
+        output = result.output;
+
+        // Wrap the entire condition in ${...} if it's not already
+        // and doesn't start with a literal string/number
+        let needs_wrap = !output.starts_with("${")
+            && !output.starts_with('"')
+            && !output.starts_with('\'')
+            && !output.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+            && !output.eq_ignore_ascii_case("true")
+            && !output.eq_ignore_ascii_case("false");
+
+        if needs_wrap {
+            output = format!("${{{}}}", output);
+        }
 
         ConversionResult {
-            output: result.output,
+            output,
             warnings: [warnings, result.warnings].concat(),
             unsupported_filters: [unsupported, result.unsupported_filters].concat(),
         }
@@ -307,5 +343,17 @@ mod tests {
         let converter = ExpressionConverter::new();
         let result = converter.convert_condition("my_var is defined");
         assert_eq!(result.output, "${my_var != null}");
+    }
+
+    #[test]
+    fn test_condition_complex() {
+        let converter = ExpressionConverter::new();
+        let result = converter.convert_condition(
+            "available_updates.results is defined and available_updates.results | length > 0",
+        );
+        assert_eq!(
+            result.output,
+            "${available_updates.results != null && available_updates.results.len() > 0}"
+        );
     }
 }
