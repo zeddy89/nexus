@@ -1,6 +1,6 @@
 [package]
 name = "nexus"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Sheldon Lewis"]
@@ -49,7 +49,7 @@ futures = "0.3"
 async-trait = "0.1"
 regex = "1"
 base64 = "0.22"
-rand = "0.8"
+rand = "0.8.5"
 similar = "2.3"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json"] }
@@ -60,6 +60,9 @@ dns-lookup = "3"
 aes-gcm = "0.10"
 argon2 = "0.5"
 zeroize = "1"
+
+# OpenSSL (vendored for cross-compilation)
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 tempfile = "3"
