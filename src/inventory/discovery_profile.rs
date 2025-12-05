@@ -1,6 +1,6 @@
+use crate::output::errors::NexusError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::output::errors::NexusError;
 
 /// Configuration profile for network discovery
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,12 +53,11 @@ impl DiscoveryProfile {
             path: Some(path.to_path_buf()),
         })?;
 
-        let profile: DiscoveryProfile = serde_yaml::from_str(&content).map_err(|e| {
-            NexusError::Inventory {
+        let profile: DiscoveryProfile =
+            serde_yaml::from_str(&content).map_err(|e| NexusError::Inventory {
                 message: format!("Failed to parse discovery profile: {}", e),
                 suggestion: Some("Check YAML syntax and structure".to_string()),
-            }
-        })?;
+            })?;
 
         Ok(profile)
     }
@@ -67,13 +66,11 @@ impl DiscoveryProfile {
     pub fn default_ssh() -> Self {
         DiscoveryProfile {
             name: "ssh_discovery".to_string(),
-            probes: vec![
-                ProbeConfig {
-                    port: 22,
-                    expect_banner: Some("SSH".to_string()),
-                    service: Some("ssh".to_string()),
-                },
-            ],
+            probes: vec![ProbeConfig {
+                port: 22,
+                expect_banner: Some("SSH".to_string()),
+                service: Some("ssh".to_string()),
+            }],
             fingerprint: FingerprintConfig {
                 methods: vec![
                     FingerprintMethod::SshBanner,
@@ -93,7 +90,8 @@ impl DiscoveryProfile {
                 },
                 ClassifyRule {
                     name: "rhel".to_string(),
-                    condition: "ssh_banner contains 'Red Hat' or ssh_banner contains 'CentOS'".to_string(),
+                    condition: "ssh_banner contains 'Red Hat' or ssh_banner contains 'CentOS'"
+                        .to_string(),
                     is_default: false,
                 },
                 ClassifyRule {
@@ -132,13 +130,11 @@ impl DiscoveryProfile {
                     FingerprintMethod::TtlAnalysis,
                 ],
             },
-            classify: vec![
-                ClassifyRule {
-                    name: "web_server".to_string(),
-                    condition: "port 80 or port 443 is open".to_string(),
-                    is_default: true,
-                },
-            ],
+            classify: vec![ClassifyRule {
+                name: "web_server".to_string(),
+                condition: "port 80 or port 443 is open".to_string(),
+                is_default: true,
+            }],
         }
     }
 
@@ -253,7 +249,9 @@ impl DiscoveryProfile {
         if self.fingerprint.methods.is_empty() {
             return Err(NexusError::Inventory {
                 message: "Discovery profile must have at least one fingerprint method".to_string(),
-                suggestion: Some("Add a fingerprint method like 'ssh_banner' or 'tcp_timestamps'".to_string()),
+                suggestion: Some(
+                    "Add a fingerprint method like 'ssh_banner' or 'tcp_timestamps'".to_string(),
+                ),
             });
         }
 

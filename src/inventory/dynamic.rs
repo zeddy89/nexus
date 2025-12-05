@@ -69,7 +69,10 @@ impl DynamicInventory {
     pub fn is_executable(path: &Path) -> bool {
         // On non-Unix systems, check for common script extensions
         if let Some(ext) = path.extension() {
-            matches!(ext.to_str(), Some("sh") | Some("py") | Some("rb") | Some("pl"))
+            matches!(
+                ext.to_str(),
+                Some("sh") | Some("py") | Some("rb") | Some("pl")
+            )
         } else {
             false
         }
@@ -95,7 +98,9 @@ impl DynamicInventory {
                     self.script_path.display(),
                     e
                 ),
-                suggestion: Some("Ensure the script is executable and has correct permissions".to_string()),
+                suggestion: Some(
+                    "Ensure the script is executable and has correct permissions".to_string(),
+                ),
             })?;
 
         if !output.status.success() {
@@ -125,18 +130,25 @@ impl DynamicInventory {
     /// Parse the JSON output from --list into an Inventory
     fn parse_list_output(&self, json: &str) -> Result<Inventory, NexusError> {
         // Parse JSON
-        let raw_json: JsonValue = serde_json::from_str(json).map_err(|e| NexusError::Inventory {
-            message: format!("Invalid JSON from inventory script: {}", e),
-            suggestion: Some(format!("JSON parse error at line {}, column {}", e.line(), e.column())),
-        })?;
+        let raw_json: JsonValue =
+            serde_json::from_str(json).map_err(|e| NexusError::Inventory {
+                message: format!("Invalid JSON from inventory script: {}", e),
+                suggestion: Some(format!(
+                    "JSON parse error at line {}, column {}",
+                    e.line(),
+                    e.column()
+                )),
+            })?;
 
         let mut inventory = Inventory::new();
 
         // Extract _meta.hostvars if present
         let hostvars = if let Some(meta) = raw_json.get("_meta") {
             if let Some(hostvars) = meta.get("hostvars") {
-                serde_json::from_value::<HashMap<String, HashMap<String, JsonValue>>>(hostvars.clone())
-                    .unwrap_or_default()
+                serde_json::from_value::<HashMap<String, HashMap<String, JsonValue>>>(
+                    hostvars.clone(),
+                )
+                .unwrap_or_default()
             } else {
                 HashMap::new()
             }
@@ -212,7 +224,10 @@ impl DynamicInventory {
                 } else {
                     return Err(NexusError::Inventory {
                         message: format!("Invalid group data for '{}'", group_name),
-                        suggestion: Some("Group must have 'hosts' (array) and optional 'vars' (object)".to_string()),
+                        suggestion: Some(
+                            "Group must have 'hosts' (array) and optional 'vars' (object)"
+                                .to_string(),
+                        ),
                     });
                 }
             }
@@ -228,7 +243,10 @@ impl DynamicInventory {
 
     /// Get host-specific variables (optional, for backwards compatibility)
     #[allow(dead_code)]
-    pub async fn get_host_vars(&self, hostname: &str) -> Result<HashMap<String, Value>, NexusError> {
+    pub async fn get_host_vars(
+        &self,
+        hostname: &str,
+    ) -> Result<HashMap<String, Value>, NexusError> {
         let output = self.run_script(&["--host", hostname]).await?;
 
         let json: JsonValue = serde_json::from_str(&output).map_err(|e| NexusError::Inventory {

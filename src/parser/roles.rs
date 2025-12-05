@@ -131,7 +131,12 @@ impl RoleResolver {
 
         // Load the role to get its dependencies
         let role = self.resolve(role_name)?;
-        let deps: Vec<String> = role.meta.dependencies.iter().map(|d| d.role.clone()).collect();
+        let deps: Vec<String> = role
+            .meta
+            .dependencies
+            .iter()
+            .map(|d| d.role.clone())
+            .collect();
 
         // Process dependencies first (depth-first)
         for dep in deps {
@@ -215,14 +220,16 @@ fn load_role_meta(role_path: &Path) -> Result<RoleMeta, NexusError> {
         path: Some(meta_file.clone()),
     })?;
 
-    let raw: RawRoleMeta = serde_yaml::from_str(&content).map_err(|e| NexusError::Parse(Box::new(ParseError {
-        kind: ParseErrorKind::InvalidYaml,
-        message: format!("Invalid role meta YAML: {}", e),
-        file: Some(meta_file.to_string_lossy().to_string()),
-        line: None,
-        column: None,
-        suggestion: None,
-    })))?;
+    let raw: RawRoleMeta = serde_yaml::from_str(&content).map_err(|e| {
+        NexusError::Parse(Box::new(ParseError {
+            kind: ParseErrorKind::InvalidYaml,
+            message: format!("Invalid role meta YAML: {}", e),
+            file: Some(meta_file.to_string_lossy().to_string()),
+            line: None,
+            column: None,
+            suggestion: None,
+        }))
+    })?;
 
     convert_role_meta(raw)
 }
@@ -278,7 +285,12 @@ fn convert_role_meta(raw: RawRoleMeta) -> Result<RoleMeta, NexusError> {
                 tags: Vec::new(),
                 when: None,
             }),
-            RawRoleDependency::Full { role, vars, tags, when } => {
+            RawRoleDependency::Full {
+                role,
+                vars,
+                tags,
+                when,
+            } => {
                 let converted_vars = vars
                     .into_iter()
                     .map(|(k, v)| Ok((k, yaml_value_to_value(v)?)))
@@ -332,15 +344,16 @@ fn load_role_vars(role_path: &Path, subdir: &str) -> Result<HashMap<String, Valu
         path: Some(vars_file.clone()),
     })?;
 
-    let yaml: HashMap<String, YamlValue> =
-        serde_yaml::from_str(&content).map_err(|e| NexusError::Parse(Box::new(ParseError {
+    let yaml: HashMap<String, YamlValue> = serde_yaml::from_str(&content).map_err(|e| {
+        NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::InvalidYaml,
             message: format!("Invalid role {} YAML: {}", subdir, e),
             file: Some(vars_file.to_string_lossy().to_string()),
             line: None,
             column: None,
             suggestion: None,
-        })))?;
+        }))
+    })?;
 
     yaml.into_iter()
         .map(|(k, v)| Ok((k, yaml_value_to_value(v)?)))
@@ -360,15 +373,16 @@ fn load_role_tasks(role_path: &Path) -> Result<Vec<TaskOrBlock>, NexusError> {
     })?;
 
     // Tasks file is a list of tasks
-    let raw_tasks: Vec<serde_yaml::Value> =
-        serde_yaml::from_str(&content).map_err(|e| NexusError::Parse(Box::new(ParseError {
+    let raw_tasks: Vec<serde_yaml::Value> = serde_yaml::from_str(&content).map_err(|e| {
+        NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::InvalidYaml,
             message: format!("Invalid role tasks YAML: {}", e),
             file: Some(tasks_file.to_string_lossy().to_string()),
             line: None,
             column: None,
             suggestion: None,
-        })))?;
+        }))
+    })?;
 
     // Convert to a temporary playbook to reuse parsing logic
     let playbook_yaml = serde_yaml::to_string(&serde_yaml::Value::Mapping({
@@ -402,15 +416,16 @@ fn load_role_handlers(role_path: &Path) -> Result<Vec<Handler>, NexusError> {
     })?;
 
     // Handlers file is a list of handlers
-    let raw_handlers: Vec<serde_yaml::Value> =
-        serde_yaml::from_str(&content).map_err(|e| NexusError::Parse(Box::new(ParseError {
+    let raw_handlers: Vec<serde_yaml::Value> = serde_yaml::from_str(&content).map_err(|e| {
+        NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::InvalidYaml,
             message: format!("Invalid role handlers YAML: {}", e),
             file: Some(handlers_file.to_string_lossy().to_string()),
             line: None,
             column: None,
             suggestion: None,
-        })))?;
+        }))
+    })?;
 
     // Convert to a temporary playbook to reuse parsing logic
     let playbook_yaml = serde_yaml::to_string(&serde_yaml::Value::Mapping({
@@ -599,11 +614,7 @@ galaxy_info:
             "- name: Base task\n  command: echo base\n",
         )
         .unwrap();
-        fs::write(
-            base_dir.join("meta").join("main.yml"),
-            "dependencies: []\n",
-        )
-        .unwrap();
+        fs::write(base_dir.join("meta").join("main.yml"), "dependencies: []\n").unwrap();
 
         // Create webserver role that depends on base
         let web_dir = roles_dir.join("webserver");
@@ -652,22 +663,50 @@ galaxy_info:
         let common = resolver.resolve("common").unwrap();
         assert_eq!(common.name, "common");
         assert!(!common.tasks.is_empty(), "common role should have tasks");
-        assert!(common.defaults.contains_key("common_packages"), "common role should have common_packages default");
-        assert!(common.defaults.contains_key("timezone"), "common role should have timezone default");
+        assert!(
+            common.defaults.contains_key("common_packages"),
+            "common role should have common_packages default"
+        );
+        assert!(
+            common.defaults.contains_key("timezone"),
+            "common role should have timezone default"
+        );
 
         // Test loading webserver role
         let webserver = resolver.resolve("webserver").unwrap();
         assert_eq!(webserver.name, "webserver");
-        assert!(!webserver.tasks.is_empty(), "webserver role should have tasks");
-        assert!(!webserver.handlers.is_empty(), "webserver role should have handlers");
-        assert!(webserver.defaults.contains_key("nginx_port"), "webserver role should have nginx_port default");
-        assert!(webserver.templates_path.is_some(), "webserver role should have templates directory");
+        assert!(
+            !webserver.tasks.is_empty(),
+            "webserver role should have tasks"
+        );
+        assert!(
+            !webserver.handlers.is_empty(),
+            "webserver role should have handlers"
+        );
+        assert!(
+            webserver.defaults.contains_key("nginx_port"),
+            "webserver role should have nginx_port default"
+        );
+        assert!(
+            webserver.templates_path.is_some(),
+            "webserver role should have templates directory"
+        );
 
         // Test dependency resolution - webserver depends on common
         let deps = resolver.resolve_dependencies("webserver").unwrap();
-        assert_eq!(deps.len(), 2, "webserver should have 2 roles in dependency chain");
-        assert_eq!(deps[0], "common", "common should be first in dependency order");
-        assert_eq!(deps[1], "webserver", "webserver should be second in dependency order");
+        assert_eq!(
+            deps.len(),
+            2,
+            "webserver should have 2 roles in dependency chain"
+        );
+        assert_eq!(
+            deps[0], "common",
+            "common should be first in dependency order"
+        );
+        assert_eq!(
+            deps[1], "webserver",
+            "webserver should be second in dependency order"
+        );
     }
 
     #[test]
@@ -716,7 +755,9 @@ galaxy_info:
         assert_eq!(role.meta.dependencies.len(), 2);
         assert_eq!(role.meta.dependencies[0].role, "common");
         assert_eq!(role.meta.dependencies[1].role, "security");
-        assert!(role.meta.dependencies[1].vars.contains_key("firewall_enabled"));
+        assert!(role.meta.dependencies[1]
+            .vars
+            .contains_key("firewall_enabled"));
         assert!(role.meta.allow_duplicates);
         assert_eq!(role.meta.platforms.len(), 2);
         assert_eq!(role.meta.author, Some("Nexus Team".to_string()));

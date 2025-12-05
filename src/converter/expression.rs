@@ -58,7 +58,10 @@ impl ExpressionConverter {
         filter_map.insert("join", FilterConversion::MethodWithArgs("join"));
         filter_map.insert("split", FilterConversion::MethodWithArgs("split"));
         filter_map.insert("replace", FilterConversion::MethodWithArgs("replace"));
-        filter_map.insert("regex_replace", FilterConversion::MethodWithArgs("regex_replace"));
+        filter_map.insert(
+            "regex_replace",
+            FilterConversion::MethodWithArgs("regex_replace"),
+        );
         filter_map.insert("default", FilterConversion::Custom(convert_default));
         filter_map.insert("d", FilterConversion::Custom(convert_default));
 
@@ -78,7 +81,10 @@ impl ExpressionConverter {
         variable_map.insert("playbook_dir", "playbook.dir");
         variable_map.insert("role_path", "role.path");
 
-        Self { filter_map, variable_map }
+        Self {
+            filter_map,
+            variable_map,
+        }
     }
 
     /// Convert a full string that may contain multiple Jinja2 expressions
@@ -94,7 +100,7 @@ impl ExpressionConverter {
         let matches: Vec<_> = re.find_iter(input).collect();
         for mat in matches.into_iter().rev() {
             let full_match = mat.as_str();
-            let inner = &full_match[2..full_match.len()-2].trim();
+            let inner = &full_match[2..full_match.len() - 2].trim();
 
             let (converted, warns, unsup) = self.convert_expression(inner);
             warnings.extend(warns);
@@ -103,7 +109,11 @@ impl ExpressionConverter {
             output = output.replace(full_match, &format!("${{{}}}", converted));
         }
 
-        ConversionResult { output, warnings, unsupported_filters: unsupported }
+        ConversionResult {
+            output,
+            warnings,
+            unsupported_filters: unsupported,
+        }
     }
 
     /// Convert a single Jinja2 expression (without the {{ }})
@@ -185,30 +195,42 @@ impl ExpressionConverter {
 
         // Handle "is defined" / "is not defined"
         let defined_re = Regex::new(r"(\w+)\s+is\s+defined").unwrap();
-        output = defined_re.replace_all(&output, "${$1 != null}").to_string();
+        output = defined_re
+            .replace_all(&output, "$${$1 != null}")
+            .to_string();
 
         let not_defined_re = Regex::new(r"(\w+)\s+is\s+not\s+defined").unwrap();
-        output = not_defined_re.replace_all(&output, "${$1 == null}").to_string();
+        output = not_defined_re
+            .replace_all(&output, "$${$1 == null}")
+            .to_string();
 
         // Handle "result is changed/failed/success"
         let changed_re = Regex::new(r"(\w+)\s+is\s+changed").unwrap();
-        output = changed_re.replace_all(&output, "${$1.changed}").to_string();
+        output = changed_re
+            .replace_all(&output, "$${$1.changed}")
+            .to_string();
 
         let failed_re = Regex::new(r"(\w+)\s+is\s+failed").unwrap();
-        output = failed_re.replace_all(&output, "${$1.failed}").to_string();
+        output = failed_re.replace_all(&output, "$${$1.failed}").to_string();
 
         let success_re = Regex::new(r"(\w+)\s+is\s+success").unwrap();
-        output = success_re.replace_all(&output, "${$1.ok}").to_string();
+        output = success_re.replace_all(&output, "$${$1.ok}").to_string();
 
         let skipped_re = Regex::new(r"(\w+)\s+is\s+skipped").unwrap();
-        output = skipped_re.replace_all(&output, "${$1.skipped}").to_string();
+        output = skipped_re
+            .replace_all(&output, "$${$1.skipped}")
+            .to_string();
 
         // Handle "is search" and "is match"
         let search_re = Regex::new(r"(\w+)\s+is\s+search\('(.+?)'\)").unwrap();
-        output = search_re.replace_all(&output, "${$1.contains('$2')}").to_string();
+        output = search_re
+            .replace_all(&output, "$${$1.contains('$2')}")
+            .to_string();
 
         let match_re = Regex::new(r"(\w+)\s+is\s+match\('(.+?)'\)").unwrap();
-        output = match_re.replace_all(&output, "${$1.matches('$2')}").to_string();
+        output = match_re
+            .replace_all(&output, "$${$1.matches('$2')}")
+            .to_string();
 
         // Convert any remaining Jinja2 expressions
         let result = self.convert_string(&output);
@@ -231,7 +253,7 @@ impl Default for ExpressionConverter {
 fn parse_filter(filter: &str) -> (&str, Option<&str>) {
     if let Some(paren_pos) = filter.find('(') {
         let name = &filter[..paren_pos];
-        let args = &filter[paren_pos+1..filter.len()-1];
+        let args = &filter[paren_pos + 1..filter.len() - 1];
         (name, Some(args))
     } else {
         (filter, None)

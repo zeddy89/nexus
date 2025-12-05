@@ -29,7 +29,14 @@ pub trait CallbackPlugin: Send + Sync {
 
     // Task lifecycle
     async fn on_task_start(&self, _host: &str, _task: &str) {}
-    async fn on_task_complete(&self, _host: &str, _task: &str, _result: &TaskOutput, _duration: Duration) {}
+    async fn on_task_complete(
+        &self,
+        _host: &str,
+        _task: &str,
+        _result: &TaskOutput,
+        _duration: Duration,
+    ) {
+    }
     async fn on_task_skipped(&self, _host: &str, _task: &str, _reason: &str) {}
     async fn on_task_failed(&self, _host: &str, _task: &str, _error: &str) {}
 
@@ -85,7 +92,13 @@ impl CallbackManager {
     }
 
     /// Call on_task_complete on all plugins
-    pub async fn on_task_complete(&self, host: &str, task: &str, result: &TaskOutput, duration: Duration) {
+    pub async fn on_task_complete(
+        &self,
+        host: &str,
+        task: &str,
+        result: &TaskOutput,
+        duration: Duration,
+    ) {
         for plugin in &self.plugins {
             plugin.on_task_complete(host, task, result, duration).await;
         }
@@ -137,10 +150,7 @@ impl JsonLogCallback {
     /// Create a new JSON log callback that writes to the specified file
     pub fn new(path: impl Into<PathBuf>) -> std::io::Result<Self> {
         let path = path.into();
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
 
         Ok(JsonLogCallback {
             file: Arc::new(Mutex::new(file)),
@@ -172,14 +182,19 @@ impl CallbackPlugin for JsonLogCallback {
     }
 
     async fn on_playbook_complete(&self, recap: &PlayRecap) {
-        let hosts: HashMap<String, serde_json::Value> = recap.hosts.iter()
+        let hosts: HashMap<String, serde_json::Value> = recap
+            .hosts
+            .iter()
             .map(|(host, stats)| {
-                (host.clone(), json!({
-                    "ok": stats.ok,
-                    "changed": stats.changed,
-                    "failed": stats.failed,
-                    "skipped": stats.skipped,
-                }))
+                (
+                    host.clone(),
+                    json!({
+                        "ok": stats.ok,
+                        "changed": stats.changed,
+                        "failed": stats.failed,
+                        "skipped": stats.skipped,
+                    }),
+                )
             })
             .collect();
 
@@ -200,7 +215,13 @@ impl CallbackPlugin for JsonLogCallback {
         }));
     }
 
-    async fn on_task_complete(&self, host: &str, task: &str, result: &TaskOutput, duration: Duration) {
+    async fn on_task_complete(
+        &self,
+        host: &str,
+        task: &str,
+        result: &TaskOutput,
+        duration: Duration,
+    ) {
         self.write_event(json!({
             "event": "task_complete",
             "timestamp": chrono::Utc::now().to_rfc3339(),
@@ -289,15 +310,23 @@ impl CallbackPlugin for TimerCallback {
         "timer"
     }
 
-    async fn on_task_complete(&self, host: &str, task: &str, _result: &TaskOutput, duration: Duration) {
+    async fn on_task_complete(
+        &self,
+        host: &str,
+        task: &str,
+        _result: &TaskOutput,
+        duration: Duration,
+    ) {
         // Record task time
-        self.task_times.lock()
+        self.task_times
+            .lock()
             .entry(task.to_string())
             .or_default()
             .push(duration);
 
         // Record host-specific time
-        self.task_host_times.lock()
+        self.task_host_times
+            .lock()
             .insert((host.to_string(), task.to_string()), duration);
     }
 
@@ -341,7 +370,10 @@ impl CallbackPlugin for TimerCallback {
             );
         }
 
-        println!("\nTotal task execution time: {:.2}s", stats.total_time.as_secs_f64());
+        println!(
+            "\nTotal task execution time: {:.2}s",
+            stats.total_time.as_secs_f64()
+        );
         println!("{}", "=".repeat(60));
     }
 }
@@ -362,11 +394,7 @@ impl WebhookCallback {
     }
 
     async fn post_event(&self, event: serde_json::Value) {
-        let _ = self.client
-            .post(&self.url)
-            .json(&event)
-            .send()
-            .await;
+        let _ = self.client.post(&self.url).json(&event).send().await;
     }
 }
 
@@ -382,18 +410,24 @@ impl CallbackPlugin for WebhookCallback {
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "playbook": playbook,
             "hosts": hosts,
-        })).await;
+        }))
+        .await;
     }
 
     async fn on_playbook_complete(&self, recap: &PlayRecap) {
-        let hosts: HashMap<String, serde_json::Value> = recap.hosts.iter()
+        let hosts: HashMap<String, serde_json::Value> = recap
+            .hosts
+            .iter()
             .map(|(host, stats)| {
-                (host.clone(), json!({
-                    "ok": stats.ok,
-                    "changed": stats.changed,
-                    "failed": stats.failed,
-                    "skipped": stats.skipped,
-                }))
+                (
+                    host.clone(),
+                    json!({
+                        "ok": stats.ok,
+                        "changed": stats.changed,
+                        "failed": stats.failed,
+                        "skipped": stats.skipped,
+                    }),
+                )
             })
             .collect();
 
@@ -403,7 +437,8 @@ impl CallbackPlugin for WebhookCallback {
             "duration_secs": recap.total_duration.as_secs_f64(),
             "hosts": hosts,
             "has_failures": recap.has_failures(),
-        })).await;
+        }))
+        .await;
     }
 
     async fn on_task_failed(&self, host: &str, task: &str, error: &str) {
@@ -413,7 +448,8 @@ impl CallbackPlugin for WebhookCallback {
             "host": host,
             "task": task,
             "error": error,
-        })).await;
+        }))
+        .await;
     }
 }
 
@@ -441,7 +477,8 @@ impl SlackCallback {
             }]
         });
 
-        let _ = self.client
+        let _ = self
+            .client
             .post(&self.webhook_url)
             .json(&payload)
             .send()
@@ -492,9 +529,7 @@ impl CallbackPlugin for SlackCallback {
             Host: `{}`\n\
             Task: {}\n\
             Error: ```{}```",
-            host,
-            task,
-            error
+            host, task, error
         );
 
         self.send_message(&message, "danger").await;
@@ -538,7 +573,8 @@ pub fn create_callback_plugin(spec: &str) -> Result<Box<dyn CallbackPlugin>, Str
     match name {
         "json_log" => {
             let path = args.ok_or_else(|| {
-                "json_log callback requires a file path (e.g., json_log:/tmp/nexus.json)".to_string()
+                "json_log callback requires a file path (e.g., json_log:/tmp/nexus.json)"
+                    .to_string()
             })?;
 
             JsonLogCallback::new(path)
@@ -546,13 +582,12 @@ pub fn create_callback_plugin(spec: &str) -> Result<Box<dyn CallbackPlugin>, Str
                 .map_err(|e| format!("Failed to create json_log callback: {}", e))
         }
 
-        "timer" => {
-            Ok(Box::new(TimerCallback::new()))
-        }
+        "timer" => Ok(Box::new(TimerCallback::new())),
 
         "webhook" => {
             let url = args.ok_or_else(|| {
-                "webhook callback requires a URL (e.g., webhook:https://example.com/events)".to_string()
+                "webhook callback requires a URL (e.g., webhook:https://example.com/events)"
+                    .to_string()
             })?;
 
             Ok(Box::new(WebhookCallback::new(url)))
@@ -566,7 +601,7 @@ pub fn create_callback_plugin(spec: &str) -> Result<Box<dyn CallbackPlugin>, Str
             Ok(Box::new(SlackCallback::new(webhook_url)))
         }
 
-        _ => Err(format!("Unknown callback plugin: {}", name))
+        _ => Err(format!("Unknown callback plugin: {}", name)),
     }
 }
 
@@ -585,10 +620,7 @@ mod tests {
 
     #[test]
     fn test_parse_callback_spec() {
-        assert_eq!(
-            parse_callback_spec("timer").unwrap(),
-            ("timer", None)
-        );
+        assert_eq!(parse_callback_spec("timer").unwrap(), ("timer", None));
 
         assert_eq!(
             parse_callback_spec("json_log:/tmp/log.json").unwrap(),

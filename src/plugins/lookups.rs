@@ -210,7 +210,8 @@ fn lookup_password(args: &[Value]) -> Result<Value, NexusError> {
 
 /// Generate password with special characters
 fn generate_password_with_special(length: usize) -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+    const CHARSET: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
     let mut rng = rand::thread_rng();
 
     (0..length)
@@ -236,8 +237,9 @@ fn lookup_template(args: &[Value], ctx: &ExecutionContext) -> Result<Value, Nexu
 
     // Simple template rendering - replace {{ var }} with variable values
     let mut result = template.clone();
-    let re = regex::Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}")
-        .map_err(|e| NexusError::Runtime {
+    let re =
+        regex::Regex::new(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*\}\}")
+            .map_err(|e| NexusError::Runtime {
             function: Some("lookup(template)".to_string()),
             message: format!("Regex error: {}", e),
             suggestion: None,
@@ -273,10 +275,7 @@ fn lookup_first_found(args: &[Value]) -> Result<Value, NexusError> {
     }
 
     let paths = match &args[0] {
-        Value::List(list) => list
-            .iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<String>>(),
+        Value::List(list) => list.iter().map(|v| v.to_string()).collect::<Vec<String>>(),
         Value::String(s) => vec![s.clone()],
         _ => {
             return Err(NexusError::Runtime {

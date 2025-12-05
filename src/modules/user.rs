@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use super::Module;
 use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
-use crate::output::errors::{NexusError, ModuleError};
+use crate::output::errors::{ModuleError, NexusError};
 use crate::parser::ast::UserState;
 
 pub struct UserModule;
@@ -40,27 +40,32 @@ impl UserModule {
                 UserState::Present => "create/update",
                 UserState::Absent => "remove",
             };
-            return Ok(TaskOutput::changed()
-                .with_stdout(format!("Would {} user: {}", action, name)));
+            return Ok(
+                TaskOutput::changed().with_stdout(format!("Would {} user: {}", action, name))
+            );
         }
 
         // Check if user exists
-        let user_exists = conn.exec(&format!("id {} >/dev/null 2>&1", name)).await?.success();
+        let user_exists = conn
+            .exec(&format!("id {} >/dev/null 2>&1", name))
+            .await?
+            .success();
 
         match state {
             UserState::Present => {
                 if user_exists {
-                    self.update_user(ctx, conn, name, uid, gid, groups, shell, home).await
+                    self.update_user(ctx, conn, name, uid, gid, groups, shell, home)
+                        .await
                 } else {
-                    self.create_user(ctx, conn, name, uid, gid, groups, shell, home, create_home).await
+                    self.create_user(ctx, conn, name, uid, gid, groups, shell, home, create_home)
+                        .await
                 }
             }
             UserState::Absent => {
                 if user_exists {
                     self.remove_user(ctx, conn, name).await
                 } else {
-                    Ok(TaskOutput::success()
-                        .with_stdout(format!("User {} does not exist", name)))
+                    Ok(TaskOutput::success().with_stdout(format!("User {} does not exist", name)))
                 }
             }
         }
@@ -110,8 +115,7 @@ impl UserModule {
         let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
 
         if result.success() {
-            Ok(TaskOutput::changed()
-                .with_stdout(format!("Created user {}", name)))
+            Ok(TaskOutput::changed().with_stdout(format!("Created user {}", name)))
         } else {
             Err(NexusError::Module(Box::new(ModuleError {
                 module: "user".to_string(),
@@ -190,15 +194,17 @@ impl UserModule {
         }
 
         if !has_changes {
-            return Ok(TaskOutput::success()
-                .with_stdout(format!("User {} is up to date", name)));
+            return Ok(TaskOutput::success().with_stdout(format!("User {} is up to date", name)));
         }
 
         let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
 
         if result.success() {
-            Ok(TaskOutput::changed()
-                .with_stdout(format!("Updated user {}: {}", name, changes.join(", "))))
+            Ok(TaskOutput::changed().with_stdout(format!(
+                "Updated user {}: {}",
+                name,
+                changes.join(", ")
+            )))
         } else {
             Err(NexusError::Module(Box::new(ModuleError {
                 module: "user".to_string(),
@@ -221,8 +227,7 @@ impl UserModule {
         let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
 
         if result.success() {
-            Ok(TaskOutput::changed()
-                .with_stdout(format!("Removed user {}", name)))
+            Ok(TaskOutput::changed().with_stdout(format!("Removed user {}", name)))
         } else {
             Err(NexusError::Module(Box::new(ModuleError {
                 module: "user".to_string(),
@@ -235,7 +240,11 @@ impl UserModule {
         }
     }
 
-    async fn get_user_info(&self, conn: &dyn Connection, name: &str) -> Result<UserInfo, NexusError> {
+    async fn get_user_info(
+        &self,
+        conn: &dyn Connection,
+        name: &str,
+    ) -> Result<UserInfo, NexusError> {
         // Get passwd entry
         let result = conn.exec(&format!("getent passwd {}", name)).await?;
         if !result.success() {

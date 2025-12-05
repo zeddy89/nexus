@@ -76,7 +76,11 @@ impl TagFilter {
         // @setup: initialization tasks
         groups.insert(
             "@setup".to_string(),
-            vec!["setup".to_string(), "init".to_string(), "bootstrap".to_string()],
+            vec![
+                "setup".to_string(),
+                "init".to_string(),
+                "bootstrap".to_string(),
+            ],
         );
 
         // @security: security-related tasks
@@ -125,10 +129,7 @@ impl TagFilter {
 
     /// Check if a task should run based on its tags
     pub fn should_run(&self, task_tags: &[String]) -> bool {
-        let task_tags_lower: HashSet<String> = task_tags
-            .iter()
-            .map(|t| t.to_lowercase())
-            .collect();
+        let task_tags_lower: HashSet<String> = task_tags.iter().map(|t| t.to_lowercase()).collect();
 
         // Special tag: "always" - always runs unless explicitly skipped
         if task_tags_lower.contains("always") {

@@ -86,7 +86,10 @@ impl HandlerRegistry {
         self.execution_order
             .iter()
             .filter(|name| {
-                notifications.get(*name).map(|s| !s.is_empty()).unwrap_or(false)
+                notifications
+                    .get(*name)
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false)
                     && !flushed.contains(*name)
             })
             .cloned()
@@ -180,8 +183,7 @@ impl Default for HandlerRegistry {
 }
 
 /// Handler execution mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FlushMode {
     /// Flush handlers at the end of the playbook (default Ansible behavior)
     #[default]
@@ -193,7 +195,6 @@ pub enum FlushMode {
     /// Flush immediately when notified (dangerous but fast)
     Immediate,
 }
-
 
 /// Configuration for handler execution
 #[derive(Debug, Clone)]
@@ -297,14 +298,11 @@ mod tests {
     #[test]
     fn test_handler_groups() {
         let mut registry = HandlerRegistry::new();
-        registry.execution_order = vec![
-            "restart_nginx".to_string(),
-            "reload_config".to_string(),
-        ];
-        registry.create_group("webserver", vec![
-            "restart_nginx".to_string(),
-            "reload_config".to_string(),
-        ]);
+        registry.execution_order = vec!["restart_nginx".to_string(), "reload_config".to_string()];
+        registry.create_group(
+            "webserver",
+            vec!["restart_nginx".to_string(), "reload_config".to_string()],
+        );
 
         registry.notify_group("webserver", "host1");
 

@@ -247,12 +247,7 @@ impl fmt::Display for NexusError {
 }
 
 /// Format a source code snippet with error highlighting
-pub fn format_source_error(
-    source: &str,
-    line: usize,
-    column: usize,
-    message: &str,
-) -> String {
+pub fn format_source_error(source: &str, line: usize, column: usize, message: &str) -> String {
     let mut result = String::new();
     let lines: Vec<&str> = source.lines().collect();
 
@@ -337,7 +332,7 @@ mod tests {
         let output = format!("{}", err);
         // Strip ANSI codes for comparison
         let clean_output = console::strip_ansi_codes(&output);
-        
+
         assert!(clean_output.contains("Unknown module"));
         assert!(clean_output.contains("test.nx.yaml:12:5"));
         assert!(clean_output.contains("package"));

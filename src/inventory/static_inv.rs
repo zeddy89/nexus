@@ -289,10 +289,7 @@ fn parse_group_section(
     Ok(())
 }
 
-fn parse_host_vars(
-    host: &mut Host,
-    map: &serde_yaml::Mapping,
-) -> Result<(), NexusError> {
+fn parse_host_vars(host: &mut Host, map: &serde_yaml::Mapping) -> Result<(), NexusError> {
     for (k, v) in map {
         if let Some(key) = k.as_str() {
             match key {
@@ -346,9 +343,7 @@ fn yaml_to_value(yaml: &YamlValue) -> Value {
             }
         }
         YamlValue::String(s) => Value::String(s.clone()),
-        YamlValue::Sequence(seq) => {
-            Value::List(seq.iter().map(yaml_to_value).collect())
-        }
+        YamlValue::Sequence(seq) => Value::List(seq.iter().map(yaml_to_value).collect()),
         YamlValue::Mapping(map) => {
             let items: HashMap<String, Value> = map
                 .iter()

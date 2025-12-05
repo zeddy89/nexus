@@ -249,8 +249,13 @@ pub fn parse_playbook_file_with_vault(
     let content = if crate::vault::is_vault_string(&content) {
         let password = vault_password.ok_or_else(|| NexusError::Runtime {
             function: None,
-            message: format!("Playbook file {} is encrypted but no vault password provided", path.display()),
-            suggestion: Some("Use --vault-password, --vault-password-file, or --ask-vault-pass".to_string()),
+            message: format!(
+                "Playbook file {} is encrypted but no vault password provided",
+                path.display()
+            ),
+            suggestion: Some(
+                "Use --vault-password, --vault-password-file, or --ask-vault-pass".to_string(),
+            ),
         })?;
 
         crate::vault::format::VaultFile::parse(&content)
@@ -277,7 +282,9 @@ pub fn parse_playbook(content: &str, source_file: String) -> Result<Playbook, Ne
             file: Some(source_file.clone()),
             line,
             column,
-            suggestion: Some("Check YAML syntax - ensure proper indentation and valid YAML".to_string()),
+            suggestion: Some(
+                "Check YAML syntax - ensure proper indentation and valid YAML".to_string(),
+            ),
         }))
     })?;
 
@@ -317,20 +324,14 @@ fn convert_playbook(raw: RawPlaybook, source_file: String) -> Result<Playbook, N
             }
         }
         Some(RawHostsValue::Inline(raw_hosts)) => {
-            let inline_hosts: Result<Vec<_>, _> = raw_hosts
-                .into_iter()
-                .map(convert_inline_host)
-                .collect();
+            let inline_hosts: Result<Vec<_>, _> =
+                raw_hosts.into_iter().map(convert_inline_host).collect();
             HostPattern::Inline(inline_hosts?)
         }
         None => HostPattern::All,
     };
 
-    let vars = raw
-        .vars
-        .map(convert_vars)
-        .transpose()?
-        .unwrap_or_default();
+    let vars = raw.vars.map(convert_vars).transpose()?.unwrap_or_default();
 
     let tasks = raw
         .tasks
@@ -403,7 +404,8 @@ fn convert_playbook(raw: RawPlaybook, source_file: String) -> Result<Playbook, N
     let serial = raw.serial.map(convert_serial).transpose()?;
 
     // Parse strategy
-    let strategy = raw.strategy
+    let strategy = raw
+        .strategy
         .map(|s| match s.to_lowercase().as_str() {
             "free" => ExecutionStrategy::Free,
             _ => ExecutionStrategy::Linear,
@@ -436,14 +438,18 @@ fn convert_serial(raw: RawSerial) -> Result<Serial, NexusError> {
         RawSerial::Percentage(s) => {
             // Parse percentage string like "25%"
             if let Some(stripped) = s.strip_suffix('%') {
-                let percentage = stripped.parse::<u8>().map_err(|_| NexusError::Parse(Box::new(ParseError {
-                    kind: ParseErrorKind::InvalidValue,
-                    message: format!("Invalid percentage value: {}", s),
-                    file: None,
-                    line: None,
-                    column: None,
-                    suggestion: Some("Use a number between 0-100 followed by % (e.g., '25%')".to_string()),
-                })))?;
+                let percentage = stripped.parse::<u8>().map_err(|_| {
+                    NexusError::Parse(Box::new(ParseError {
+                        kind: ParseErrorKind::InvalidValue,
+                        message: format!("Invalid percentage value: {}", s),
+                        file: None,
+                        line: None,
+                        column: None,
+                        suggestion: Some(
+                            "Use a number between 0-100 followed by % (e.g., '25%')".to_string(),
+                        ),
+                    }))
+                })?;
                 if percentage > 100 {
                     return Err(NexusError::Parse(Box::new(ParseError {
                         kind: ParseErrorKind::InvalidValue,
@@ -470,7 +476,9 @@ fn convert_serial(raw: RawSerial) -> Result<Serial, NexusError> {
     }
 }
 
-pub(crate) fn convert_vars(vars: HashMap<String, YamlValue>) -> Result<HashMap<String, Value>, NexusError> {
+pub(crate) fn convert_vars(
+    vars: HashMap<String, YamlValue>,
+) -> Result<HashMap<String, Value>, NexusError> {
     vars.into_iter()
         .map(|(k, v)| Ok((k, yaml_to_value(v)?)))
         .collect()
@@ -512,7 +520,11 @@ fn yaml_to_value(yaml: YamlValue) -> Result<Value, NexusError> {
 }
 
 /// Convert RawTask to either Task or Block
-fn convert_task_or_block(raw: RawTask, source_file: &str, index: usize) -> Result<TaskOrBlock, NexusError> {
+fn convert_task_or_block(
+    raw: RawTask,
+    source_file: &str,
+    index: usize,
+) -> Result<TaskOrBlock, NexusError> {
     // Check if this is an import_tasks (static import)
     if let Some(ref import_file) = raw.import_tasks {
         return convert_import_tasks(import_file.clone(), raw, source_file);
@@ -534,11 +546,16 @@ fn convert_task_or_block(raw: RawTask, source_file: &str, index: usize) -> Resul
 }
 
 /// Convert RawTask to Block
-fn convert_block(raw: RawTask, source_file: &str, _index: usize) -> Result<TaskOrBlock, NexusError> {
+fn convert_block(
+    raw: RawTask,
+    source_file: &str,
+    _index: usize,
+) -> Result<TaskOrBlock, NexusError> {
     let name = raw.name.clone();
 
     // Parse when condition
-    let when = raw.when_condition
+    let when = raw
+        .when_condition
         .map(|w| parse_condition(&w))
         .transpose()?;
 
@@ -550,7 +567,8 @@ fn convert_block(raw: RawTask, source_file: &str, _index: usize) -> Result<TaskO
     };
 
     // Convert block tasks
-    let block = raw.block
+    let block = raw
+        .block
         .map(|tasks| {
             tasks
                 .into_iter()
@@ -562,7 +580,8 @@ fn convert_block(raw: RawTask, source_file: &str, _index: usize) -> Result<TaskO
         .unwrap_or_default();
 
     // Convert rescue tasks
-    let rescue = raw.rescue
+    let rescue = raw
+        .rescue
         .map(|tasks| {
             tasks
                 .into_iter()
@@ -574,7 +593,8 @@ fn convert_block(raw: RawTask, source_file: &str, _index: usize) -> Result<TaskO
         .unwrap_or_default();
 
     // Convert always tasks
-    let always = raw.always
+    let always = raw
+        .always
         .map(|tasks| {
             tasks
                 .into_iter()
@@ -597,7 +617,10 @@ fn convert_block(raw: RawTask, source_file: &str, _index: usize) -> Result<TaskO
 }
 
 fn convert_task(raw: RawTask, source_file: &str, index: usize) -> Result<Task, NexusError> {
-    let name = raw.name.clone().unwrap_or_else(|| format!("Task {}", index + 1));
+    let name = raw
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("Task {}", index + 1));
 
     let when = raw
         .when_condition
@@ -606,10 +629,7 @@ fn convert_task(raw: RawTask, source_file: &str, index: usize) -> Result<Task, N
 
     let fail_when = raw.fail_when.map(|w| parse_condition(&w)).transpose()?;
 
-    let changed_when = raw
-        .changed_when
-        .map(|w| parse_condition(&w))
-        .transpose()?;
+    let changed_when = raw.changed_when.map(|w| parse_condition(&w)).transpose()?;
 
     let notify = match raw.notify {
         Some(NotifyValue::Single(s)) => vec![s],
@@ -662,9 +682,7 @@ fn convert_task(raw: RawTask, source_file: &str, index: usize) -> Result<Task, N
     let timeout = raw.timeout.map(Duration::from_secs);
 
     // Parse delegate_to
-    let delegate_to = raw.delegate_to
-        .map(|d| parse_condition(&d))
-        .transpose()?;
+    let delegate_to = raw.delegate_to.map(|d| parse_condition(&d)).transpose()?;
 
     Ok(Task {
         name,
@@ -761,17 +779,21 @@ fn convert_async_config(async_timeout: Option<u64>, poll: Option<u64>) -> AsyncC
     }
 }
 
-fn convert_handler(raw: RawHandler, source_file: &str, index: usize) -> Result<Handler, NexusError> {
-    let name = raw
-        .name
-        .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
+fn convert_handler(
+    raw: RawHandler,
+    source_file: &str,
+    index: usize,
+) -> Result<Handler, NexusError> {
+    let name = raw.name.ok_or_else(|| {
+        NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::MissingField,
             message: format!("Handler {} is missing a 'name' field", index + 1),
             file: Some(source_file.to_string()),
             line: None,
             column: None,
             suggestion: Some("Add a 'name:' field to identify this handler".to_string()),
-        })))?;
+        }))
+    })?;
 
     let module = parse_module_call(&raw.module, source_file)?;
 
@@ -790,7 +812,12 @@ fn convert_role_ref(raw: RawRoleRef, _source_file: &str) -> Result<RoleRef, Nexu
             tags: Vec::new(),
             when: None,
         }),
-        RawRoleRef::Full { role, vars, tags, when } => {
+        RawRoleRef::Full {
+            role,
+            vars,
+            tags,
+            when,
+        } => {
             let converted_vars = vars
                 .into_iter()
                 .map(|(k, v)| Ok((k, yaml_to_value(v)?)))
@@ -912,7 +939,11 @@ fn parse_module_call(
 
     Err(NexusError::Parse(Box::new(ParseError {
         kind: ParseErrorKind::UnknownModule,
-        message: format!("Unknown module: {}. Available keys: {:?}", unknown_key, module.keys().collect::<Vec<_>>()),
+        message: format!(
+            "Unknown module: {}. Available keys: {:?}",
+            unknown_key,
+            module.keys().collect::<Vec<_>>()
+        ),
         file: None,
         line: None,
         column: None,
@@ -921,7 +952,9 @@ fn parse_module_call(
 }
 
 fn suggest_module(name: &str) -> String {
-    let modules = ["package", "service", "file", "command", "shell", "user", "template", "facts", "run"];
+    let modules = [
+        "package", "service", "file", "command", "shell", "user", "template", "facts", "run",
+    ];
 
     // Simple edit distance for suggestions
     for m in &modules {
@@ -940,23 +973,20 @@ fn suggest_module(name: &str) -> String {
         }
     }
 
-    format!(
-        "Available modules: {}",
-        modules.join(", ")
-    )
+    format!("Available modules: {}", modules.join(", "))
 }
 
 fn parse_run_module(value: &YamlValue, _source_file: &str) -> Result<ModuleCall, NexusError> {
-    let call_str = value
-        .as_str()
-        .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
+    let call_str = value.as_str().ok_or_else(|| {
+        NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::InvalidValue,
             message: "command must be a string".to_string(),
             file: None,
             line: None,
             column: None,
             suggestion: None,
-        })))?;
+        }))
+    })?;
 
     // Parse function call: function_name() or function_name(arg1, arg2)
     let (name, args) = if let Some(paren_pos) = call_str.find('(') {
@@ -1040,21 +1070,23 @@ fn parse_file_module(
             map.get(YamlValue::String(key.to_string()))
         } else {
             None
-        }.or_else(|| module.get(key))
+        }
+        .or_else(|| module.get(key))
     };
 
     // Extract path - either from value mapping or value itself
     let path = if let YamlValue::Mapping(map) = value {
         // value is the params mapping, get path from it
-        let val = map.get("path")
-            .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
+        let val = map.get("path").ok_or_else(|| {
+            NexusError::Parse(Box::new(ParseError {
                 kind: ParseErrorKind::MissingField,
                 message: "file module requires 'path' field".to_string(),
                 file: None,
                 line: None,
                 column: None,
                 suggestion: Some("Add path: /path/to/file".to_string()),
-            })))?;
+            }))
+        })?;
         yaml_to_expression(val)?
     } else {
         // value itself is the path
@@ -1078,9 +1110,7 @@ fn parse_file_module(
         .map(yaml_to_expression)
         .transpose()?;
 
-    let content = get_param("content")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let content = get_param("content").map(yaml_to_expression).transpose()?;
 
     let owner = get_param("owner").map(yaml_to_expression).transpose()?;
 
@@ -1106,15 +1136,9 @@ fn parse_command_module(
 ) -> Result<ModuleCall, NexusError> {
     let cmd = yaml_to_expression(value)?;
 
-    let creates = module
-        .get("creates")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let creates = module.get("creates").map(yaml_to_expression).transpose()?;
 
-    let removes = module
-        .get("removes")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let removes = module.get("removes").map(yaml_to_expression).transpose()?;
 
     Ok(ModuleCall::Command {
         cmd,
@@ -1185,14 +1209,16 @@ fn parse_template_module(
         .get("dest")
         .map(yaml_to_expression)
         .transpose()?
-        .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
-            kind: ParseErrorKind::MissingField,
-            message: "template module requires 'dest' field".to_string(),
-            file: None,
-            line: None,
-            column: None,
-            suggestion: Some("Add dest: /path/to/destination".to_string()),
-        })))?;
+        .ok_or_else(|| {
+            NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::MissingField,
+                message: "template module requires 'dest' field".to_string(),
+                file: None,
+                line: None,
+                column: None,
+                suggestion: Some("Add dest: /path/to/destination".to_string()),
+            }))
+        })?;
 
     let owner = module.get("owner").map(yaml_to_expression).transpose()?;
     let group = module.get("group").map(yaml_to_expression).transpose()?;
@@ -1263,7 +1289,8 @@ fn parse_shell_module(
             map.get(YamlValue::String(key.to_string()))
         } else {
             None
-        }.or_else(|| module.get(key))
+        }
+        .or_else(|| module.get(key))
     };
 
     // Extract command - either from value directly or from cmd/command/_raw_params field
@@ -1277,14 +1304,16 @@ fn parse_shell_module(
             .or_else(|| get_param("_raw_params"))
             .map(yaml_to_expression)
             .transpose()?
-            .ok_or_else(|| NexusError::Parse(Box::new(ParseError {
-                kind: ParseErrorKind::MissingField,
-                message: "shell module requires 'cmd' or 'command' field".to_string(),
-                file: None,
-                line: None,
-                column: None,
-                suggestion: Some("Add cmd: 'your command here'".to_string()),
-            })))?
+            .ok_or_else(|| {
+                NexusError::Parse(Box::new(ParseError {
+                    kind: ParseErrorKind::MissingField,
+                    message: "shell module requires 'cmd' or 'command' field".to_string(),
+                    file: None,
+                    line: None,
+                    column: None,
+                    suggestion: Some("Add cmd: 'your command here'".to_string()),
+                }))
+            })?
     } else {
         return Err(NexusError::Parse(Box::new(ParseError {
             kind: ParseErrorKind::InvalidValue,
@@ -1292,22 +1321,18 @@ fn parse_shell_module(
             file: None,
             line: None,
             column: None,
-            suggestion: Some("Use 'shell: \"command\"' or 'shell: { cmd: \"command\" }'".to_string()),
+            suggestion: Some(
+                "Use 'shell: \"command\"' or 'shell: { cmd: \"command\" }'".to_string(),
+            ),
         })));
     };
 
     // Extract optional parameters
-    let chdir = get_param("chdir")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let chdir = get_param("chdir").map(yaml_to_expression).transpose()?;
 
-    let creates = get_param("creates")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let creates = get_param("creates").map(yaml_to_expression).transpose()?;
 
-    let removes = get_param("removes")
-        .map(yaml_to_expression)
-        .transpose()?;
+    let removes = get_param("removes").map(yaml_to_expression).transpose()?;
 
     Ok(ModuleCall::Shell {
         command,
@@ -1510,7 +1535,10 @@ roles:
         let playbook = parse_playbook(yaml, "test.nx.yaml".to_string()).unwrap();
 
         assert_eq!(playbook.roles.len(), 1);
-        assert!(playbook.roles[0].when.is_some(), "role should have when condition");
+        assert!(
+            playbook.roles[0].when.is_some(),
+            "role should have when condition"
+        );
     }
 
     #[test]
@@ -1653,8 +1681,14 @@ tasks:
             assert_eq!(hosts[0].port, Some(22));
             assert_eq!(hosts[0].user, Some("admin".to_string()));
             assert_eq!(hosts[0].vars.len(), 2);
-            assert_eq!(hosts[0].vars.get("http_port").and_then(|v| v.as_i64()), Some(8080));
-            assert_eq!(hosts[0].vars.get("role").and_then(|v| v.as_str()), Some("primary"));
+            assert_eq!(
+                hosts[0].vars.get("http_port").and_then(|v| v.as_i64()),
+                Some(8080)
+            );
+            assert_eq!(
+                hosts[0].vars.get("role").and_then(|v| v.as_str()),
+                Some("primary")
+            );
 
             // Check second host
             assert_eq!(hosts[1].name, "web2.example.com");
@@ -1662,8 +1696,14 @@ tasks:
             assert_eq!(hosts[1].port, None);
             assert_eq!(hosts[1].user, None);
             assert_eq!(hosts[1].vars.len(), 2);
-            assert_eq!(hosts[1].vars.get("http_port").and_then(|v| v.as_i64()), Some(8081));
-            assert_eq!(hosts[1].vars.get("role").and_then(|v| v.as_str()), Some("secondary"));
+            assert_eq!(
+                hosts[1].vars.get("http_port").and_then(|v| v.as_i64()),
+                Some(8081)
+            );
+            assert_eq!(
+                hosts[1].vars.get("role").and_then(|v| v.as_str()),
+                Some("secondary")
+            );
         } else {
             panic!("Expected HostPattern::Inline, got {:?}", playbook.hosts);
         }
@@ -1690,7 +1730,11 @@ tasks:
 }
 
 /// Convert import_tasks - static import resolved at parse time
-fn convert_import_tasks(import_file: String, raw: RawTask, source_file: &str) -> Result<TaskOrBlock, NexusError> {
+fn convert_import_tasks(
+    import_file: String,
+    raw: RawTask,
+    source_file: &str,
+) -> Result<TaskOrBlock, NexusError> {
     // Parse tags
     let tags = match raw.tags {
         Some(TagsValue::Single(s)) => s.split(',').map(|t| t.trim().to_string()).collect(),
@@ -1699,10 +1743,7 @@ fn convert_import_tasks(import_file: String, raw: RawTask, source_file: &str) ->
     };
 
     // Convert vars
-    let vars = raw.vars
-        .map(convert_vars)
-        .transpose()?
-        .unwrap_or_default();
+    let vars = raw.vars.map(convert_vars).transpose()?.unwrap_or_default();
 
     // Resolve the file path relative to the playbook directory
     let playbook_dir = Path::new(source_file).parent().unwrap_or(Path::new("."));
@@ -1726,7 +1767,11 @@ fn convert_import_tasks(import_file: String, raw: RawTask, source_file: &str) ->
 }
 
 /// Convert include_tasks - dynamic include resolved at runtime
-fn convert_include_tasks(include_file: String, raw: RawTask, _source_file: &str) -> Result<TaskOrBlock, NexusError> {
+fn convert_include_tasks(
+    include_file: String,
+    raw: RawTask,
+    _source_file: &str,
+) -> Result<TaskOrBlock, NexusError> {
     // Parse the file expression (can contain variables)
     let file_expr = if has_interpolation(&include_file) {
         parse_interpolated_string(&include_file)?
@@ -1735,7 +1780,8 @@ fn convert_include_tasks(include_file: String, raw: RawTask, _source_file: &str)
     };
 
     // Parse when condition
-    let when = raw.when_condition
+    let when = raw
+        .when_condition
         .map(|w| parse_condition(&w))
         .transpose()?;
 
@@ -1751,7 +1797,8 @@ fn convert_include_tasks(include_file: String, raw: RawTask, _source_file: &str)
     };
 
     // Convert vars to expressions
-    let vars = raw.vars
+    let vars = raw
+        .vars
         .map(|v| {
             v.into_iter()
                 .map(|(k, val)| Ok((k, yaml_to_expression(&val)?)))

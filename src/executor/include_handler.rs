@@ -8,7 +8,7 @@ use crate::executor::context::ExecutionContext;
 use crate::inventory::Host;
 use crate::output::errors::NexusError;
 use crate::output::terminal::PlayRecap;
-use crate::parser::ast::{IncludeTasks, ImportTasks, Value};
+use crate::parser::ast::{ImportTasks, IncludeTasks, Value};
 use crate::parser::parse_task_file;
 use crate::runtime::evaluate_expression;
 
@@ -37,16 +37,19 @@ impl Scheduler {
         // Add loop item if present
         if let Some((item, idx)) = loop_item {
             include_vars.insert(include.loop_var.clone(), item);
-            include_vars.insert("ansible_loop_var".to_string(), Value::String(include.loop_var.clone()));
+            include_vars.insert(
+                "ansible_loop_var".to_string(),
+                Value::String(include.loop_var.clone()),
+            );
             include_vars.insert("ansible_loop_index".to_string(), Value::Int(idx as i64));
             include_vars.insert("ansible_loop_index0".to_string(), Value::Int(idx as i64));
-            include_vars.insert("ansible_loop_index1".to_string(), Value::Int((idx + 1) as i64));
+            include_vars.insert(
+                "ansible_loop_index1".to_string(),
+                Value::Int((idx + 1) as i64),
+            );
         }
 
-        let ctx = ExecutionContext::new(
-            Arc::new(hosts[0].clone()),
-            include_vars.clone(),
-        );
+        let ctx = ExecutionContext::new(Arc::new(hosts[0].clone()), include_vars.clone());
 
         // Evaluate file path expression
         let file_path_value = evaluate_expression(&include.file, &ctx)?;
@@ -55,7 +58,10 @@ impl Scheduler {
             _ => {
                 return Err(NexusError::Runtime {
                     function: None,
-                    message: format!("include_tasks file must be a string, got: {:?}", file_path_value),
+                    message: format!(
+                        "include_tasks file must be a string, got: {:?}",
+                        file_path_value
+                    ),
                     suggestion: None,
                 });
             }
@@ -84,7 +90,9 @@ impl Scheduler {
         }
 
         if self.config.verbose {
-            self.output.lock().print_task_header(&format!("INCLUDE: {}", file_path));
+            self.output
+                .lock()
+                .print_task_header(&format!("INCLUDE: {}", file_path));
         }
 
         // Execute the included tasks
@@ -97,7 +105,8 @@ impl Scheduler {
             tag_filter,
             handler_registry,
             recap,
-        )).await
+        ))
+        .await
     }
 
     /// Handle static import (called during task list execution)
@@ -136,7 +145,9 @@ impl Scheduler {
         }
 
         if self.config.verbose {
-            self.output.lock().print_task_header(&format!("IMPORT: {}", import.file));
+            self.output
+                .lock()
+                .print_task_header(&format!("IMPORT: {}", import.file));
         }
 
         // Execute the imported tasks
@@ -149,6 +160,7 @@ impl Scheduler {
             tag_filter,
             handler_registry,
             recap,
-        )).await
+        ))
+        .await
     }
 }

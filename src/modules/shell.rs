@@ -4,7 +4,7 @@
 use async_trait::async_trait;
 
 use super::Module;
-use crate::executor::{ExecutionContext, Connection, SshConnection, TaskOutput};
+use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
 use crate::output::errors::NexusError;
 
 pub struct ShellModule;
@@ -46,7 +46,10 @@ impl ShellModule {
 
         // Check 'creates' condition - skip if file exists
         if let Some(ref creates_path) = creates {
-            let exists = conn.exec(&format!("test -e '{}'", creates_path)).await?.success();
+            let exists = conn
+                .exec(&format!("test -e '{}'", creates_path))
+                .await?
+                .success();
             if exists {
                 return Ok(TaskOutput::success()
                     .with_stdout(format!("Skipped - {} already exists", creates_path)));
@@ -55,7 +58,10 @@ impl ShellModule {
 
         // Check 'removes' condition - skip if file doesn't exist
         if let Some(ref removes_path) = removes {
-            let exists = conn.exec(&format!("test -e '{}'", removes_path)).await?.success();
+            let exists = conn
+                .exec(&format!("test -e '{}'", removes_path))
+                .await?
+                .success();
             if !exists {
                 return Ok(TaskOutput::success()
                     .with_stdout(format!("Skipped - {} does not exist", removes_path)));

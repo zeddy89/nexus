@@ -13,9 +13,9 @@
 // - Expression evaluation within templates
 // - Comments: {# this is a comment #}
 
+use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
-use regex::Regex;
 
 use crate::executor::ExecutionContext;
 use crate::output::errors::NexusError;
@@ -95,7 +95,11 @@ impl TemplateEngine {
     }
 
     /// Render a template file
-    pub fn render_file(&mut self, path: &Path, ctx: &ExecutionContext) -> Result<String, NexusError> {
+    pub fn render_file(
+        &mut self,
+        path: &Path,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
         let content = std::fs::read_to_string(path).map_err(|e| NexusError::Io {
             message: format!("Failed to read template file: {}", e),
             path: Some(path.to_path_buf()),
@@ -109,7 +113,9 @@ impl TemplateEngine {
         let mut result = template.to_string();
 
         // Extract and store macros
-        let macro_re = Regex::new(r"\{%\s*macro\s+(\w+)\s*\((.*?)\)\s*%\}([\s\S]*?)\{%\s*endmacro\s*%\}").unwrap();
+        let macro_re =
+            Regex::new(r"\{%\s*macro\s+(\w+)\s*\((.*?)\)\s*%\}([\s\S]*?)\{%\s*endmacro\s*%\}")
+                .unwrap();
         for cap in macro_re.captures_iter(template) {
             let name = cap[1].to_string();
             let params: Vec<String> = cap[2]
@@ -119,7 +125,8 @@ impl TemplateEngine {
                 .collect();
             let body = cap[3].to_string();
 
-            self.macros.insert(name.clone(), Macro { name, params, body });
+            self.macros
+                .insert(name.clone(), Macro { name, params, body });
         }
         result = macro_re.replace_all(&result, "").to_string();
 
@@ -131,7 +138,8 @@ impl TemplateEngine {
         }
 
         // Extract blocks
-        let block_re = Regex::new(r"\{%\s*block\s+(\w+)\s*%\}([\s\S]*?)\{%\s*endblock\s*%\}").unwrap();
+        let block_re =
+            Regex::new(r"\{%\s*block\s+(\w+)\s*%\}([\s\S]*?)\{%\s*endblock\s*%\}").unwrap();
         for cap in block_re.captures_iter(&result) {
             let name = cap[1].to_string();
             let content = cap[2].to_string();
@@ -153,11 +161,17 @@ impl TemplateEngine {
         if let Some(ref parent_path) = self.parent_template {
             let parent_content = self.load_template(parent_path)?;
             // Replace blocks in parent with child blocks
-            let block_re = Regex::new(r"\{%\s*block\s+(\w+)\s*%\}([\s\S]*?)\{%\s*endblock\s*%\}").unwrap();
-            result = block_re.replace_all(&parent_content, |caps: &regex::Captures| {
-                let block_name = &caps[1];
-                self.blocks.get(block_name).cloned().unwrap_or_else(|| caps[2].to_string())
-            }).to_string();
+            let block_re =
+                Regex::new(r"\{%\s*block\s+(\w+)\s*%\}([\s\S]*?)\{%\s*endblock\s*%\}").unwrap();
+            result = block_re
+                .replace_all(&parent_content, |caps: &regex::Captures| {
+                    let block_name = &caps[1];
+                    self.blocks
+                        .get(block_name)
+                        .cloned()
+                        .unwrap_or_else(|| caps[2].to_string())
+                })
+                .to_string();
         }
 
         // Handle includes
@@ -207,12 +221,13 @@ impl TemplateEngine {
         let mut safety = 100; // Prevent infinite loops
 
         while include_re.is_match(&result) && safety > 0 {
-            result = include_re.replace_all(&result, |caps: &regex::Captures| {
-                let include_name = &caps[1];
-                self.load_template(include_name).unwrap_or_else(|_| {
-                    format!("<!-- Include not found: {} -->", include_name)
+            result = include_re
+                .replace_all(&result, |caps: &regex::Captures| {
+                    let include_name = &caps[1];
+                    self.load_template(include_name)
+                        .unwrap_or_else(|_| format!("<!-- Include not found: {} -->", include_name))
                 })
-            }).to_string();
+                .to_string();
             safety -= 1;
         }
 
@@ -220,8 +235,14 @@ impl TemplateEngine {
     }
 
     /// Process {% for %} loops
-    fn process_for_loops(&self, template: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
-        let for_re = Regex::new(r"\{%\s*for\s+(\w+)\s+in\s+(.+?)\s*%\}([\s\S]*?)\{%\s*endfor\s*%\}").unwrap();
+    fn process_for_loops(
+        &self,
+        template: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
+        let for_re =
+            Regex::new(r"\{%\s*for\s+(\w+)\s+in\s+(.+?)\s*%\}([\s\S]*?)\{%\s*endfor\s*%\}")
+                .unwrap();
 
         let mut result = template.to_string();
         let mut safety = 100;
@@ -238,10 +259,15 @@ impl TemplateEngine {
                 // Evaluate the iterable expression
                 let items = match self.evaluate_simple_expr(&iter_expr, ctx) {
                     Ok(Value::List(items)) => items,
-                    Ok(Value::String(s)) => s.chars().map(|c| Value::String(c.to_string())).collect(),
+                    Ok(Value::String(s)) => {
+                        s.chars().map(|c| Value::String(c.to_string())).collect()
+                    }
                     Ok(Value::Dict(d)) => d.into_keys().map(Value::String).collect(),
                     _ => {
-                        new_result.replace_range(full_match.range(), &format!("<!-- Cannot iterate over: {} -->", iter_expr));
+                        new_result.replace_range(
+                            full_match.range(),
+                            &format!("<!-- Cannot iterate over: {} -->", iter_expr),
+                        );
                         result = new_result;
                         safety -= 1;
                         continue;
@@ -287,7 +313,11 @@ impl TemplateEngine {
     }
 
     /// Process {% if %} conditionals
-    fn process_conditionals(&self, template: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
+    fn process_conditionals(
+        &self,
+        template: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
         // Match if/elif/else/endif blocks (non-greedy, innermost first)
         let if_re = Regex::new(r"\{%\s*if\s+(.+?)\s*%\}([\s\S]*?)\{%\s*endif\s*%\}").unwrap();
 
@@ -295,11 +325,13 @@ impl TemplateEngine {
         let mut safety = 100;
 
         while if_re.is_match(&result) && safety > 0 {
-            result = if_re.replace(&result, |caps: &regex::Captures| {
-                let condition_and_body = &caps[0];
-                self.evaluate_conditional_block(condition_and_body, ctx)
-                    .unwrap_or_else(|e| format!("<!-- If error: {} -->", e))
-            }).to_string();
+            result = if_re
+                .replace(&result, |caps: &regex::Captures| {
+                    let condition_and_body = &caps[0];
+                    self.evaluate_conditional_block(condition_and_body, ctx)
+                        .unwrap_or_else(|e| format!("<!-- If error: {} -->", e))
+                })
+                .to_string();
             safety -= 1;
         }
 
@@ -307,7 +339,11 @@ impl TemplateEngine {
     }
 
     /// Evaluate a complete if/elif/else block
-    fn evaluate_conditional_block(&self, block: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
+    fn evaluate_conditional_block(
+        &self,
+        block: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
         // Parse the block into conditions and bodies
         let if_match = Regex::new(r"\{%\s*if\s+(.+?)\s*%\}").unwrap();
         let elif_match = Regex::new(r"\{%\s*elif\s+(.+?)\s*%\}").unwrap();
@@ -346,7 +382,11 @@ impl TemplateEngine {
                         elif_match.find(after_elif).map(|m| m.start()),
                         else_match.find(after_elif).map(|m| m.start()),
                         after_elif.find("{% endif %}"),
-                    ].into_iter().flatten().min().unwrap_or(after_elif.len());
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .min()
+                    .unwrap_or(after_elif.len());
 
                     branches.push((Some(elif_cond), &after_elif[..next_branch]));
                     remaining = &after_elif[next_branch..];
@@ -380,41 +420,55 @@ impl TemplateEngine {
     }
 
     /// Process macro calls: {{ macro_name(args) }}
-    fn process_macro_calls(&self, template: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
+    fn process_macro_calls(
+        &self,
+        template: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
         let mut result = template.to_string();
 
         for (name, macro_def) in &self.macros {
-            let call_re = Regex::new(&format!(r"\{{\{{\s*{}\s*\((.*?)\)\s*\}}\}}", regex::escape(name))).unwrap();
+            let call_re = Regex::new(&format!(
+                r"\{{\{{\s*{}\s*\((.*?)\)\s*\}}\}}",
+                regex::escape(name)
+            ))
+            .unwrap();
 
-            result = call_re.replace_all(&result, |caps: &regex::Captures| {
-                let args_str = &caps[1];
-                let args: Vec<&str> = if args_str.is_empty() {
-                    Vec::new()
-                } else {
-                    args_str.split(',').map(|s| s.trim()).collect()
-                };
+            result = call_re
+                .replace_all(&result, |caps: &regex::Captures| {
+                    let args_str = &caps[1];
+                    let args: Vec<&str> = if args_str.is_empty() {
+                        Vec::new()
+                    } else {
+                        args_str.split(',').map(|s| s.trim()).collect()
+                    };
 
-                // Create context with macro parameters
-                let macro_ctx = ctx.clone_for_task();
-                for (i, param) in macro_def.params.iter().enumerate() {
-                    if let Some(arg) = args.get(i) {
-                        if let Ok(value) = self.evaluate_simple_expr(arg, ctx) {
-                            macro_ctx.set_var(param, value);
+                    // Create context with macro parameters
+                    let macro_ctx = ctx.clone_for_task();
+                    for (i, param) in macro_def.params.iter().enumerate() {
+                        if let Some(arg) = args.get(i) {
+                            if let Ok(value) = self.evaluate_simple_expr(arg, ctx) {
+                                macro_ctx.set_var(param, value);
+                            }
                         }
                     }
-                }
 
-                // Render macro body
-                self.render_inner(&macro_def.body, &macro_ctx)
-                    .unwrap_or_else(|e| format!("<!-- Macro error: {} -->", e))
-            }).to_string();
+                    // Render macro body
+                    self.render_inner(&macro_def.body, &macro_ctx)
+                        .unwrap_or_else(|e| format!("<!-- Macro error: {} -->", e))
+                })
+                .to_string();
         }
 
         Ok(result)
     }
 
     /// Process {{ expression }} and {{ expression | filter }}
-    fn process_expressions(&self, template: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
+    fn process_expressions(
+        &self,
+        template: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<String, NexusError> {
         // Match {{ ... }} but not inside {% %}
         let expr_re = Regex::new(r"\{\{(.*?)\}\}").unwrap();
 
@@ -462,22 +516,25 @@ impl TemplateEngine {
         let parts: Vec<&str> = expr.split('|').collect();
         let base_expr = parts[0].trim();
 
-        let filters: Vec<(String, Vec<String>)> = parts[1..].iter().map(|filter| {
-            let filter = filter.trim();
-            // Parse filter name and arguments
-            if let Some(paren_pos) = filter.find('(') {
-                let name = filter[..paren_pos].trim().to_string();
-                let args_str = filter[paren_pos + 1..].trim_end_matches(')');
-                let args: Vec<String> = if args_str.is_empty() {
-                    Vec::new()
+        let filters: Vec<(String, Vec<String>)> = parts[1..]
+            .iter()
+            .map(|filter| {
+                let filter = filter.trim();
+                // Parse filter name and arguments
+                if let Some(paren_pos) = filter.find('(') {
+                    let name = filter[..paren_pos].trim().to_string();
+                    let args_str = filter[paren_pos + 1..].trim_end_matches(')');
+                    let args: Vec<String> = if args_str.is_empty() {
+                        Vec::new()
+                    } else {
+                        self.parse_filter_args(args_str)
+                    };
+                    (name, args)
                 } else {
-                    self.parse_filter_args(args_str)
-                };
-                (name, args)
-            } else {
-                (filter.to_string(), Vec::new())
-            }
-        }).collect();
+                    (filter.to_string(), Vec::new())
+                }
+            })
+            .collect();
 
         (base_expr, filters)
     }
@@ -495,11 +552,11 @@ impl TemplateEngine {
                 '"' | '\'' if !in_quotes => {
                     in_quotes = true;
                     quote_char = c;
-                    current.push(c);  // Keep the opening quote
+                    current.push(c); // Keep the opening quote
                 }
                 c if c == quote_char && in_quotes => {
                     in_quotes = false;
-                    current.push(c);  // Keep the closing quote
+                    current.push(c); // Keep the closing quote
                 }
                 ',' if !in_quotes => {
                     if !current.trim().is_empty() {
@@ -522,9 +579,11 @@ impl TemplateEngine {
     /// Resolve a filter argument - if it's a quoted string, return the content; otherwise evaluate as expression
     fn resolve_filter_arg(&self, arg: &str, ctx: &ExecutionContext) -> Result<String, NexusError> {
         // Check if it's a quoted string literal
-        if (arg.starts_with('"') && arg.ends_with('"')) || (arg.starts_with('\'') && arg.ends_with('\'')) {
+        if (arg.starts_with('"') && arg.ends_with('"'))
+            || (arg.starts_with('\'') && arg.ends_with('\''))
+        {
             // Return the content without quotes
-            Ok(arg[1..arg.len()-1].to_string())
+            Ok(arg[1..arg.len() - 1].to_string())
         } else {
             // Evaluate as expression and convert to string
             let val = self.evaluate_simple_expr(arg, ctx)?;
@@ -533,7 +592,13 @@ impl TemplateEngine {
     }
 
     /// Apply a filter to a value
-    fn apply_filter(&self, value: &Value, filter: &str, args: &[String], ctx: &ExecutionContext) -> Result<Value, NexusError> {
+    fn apply_filter(
+        &self,
+        value: &Value,
+        filter: &str,
+        args: &[String],
+        ctx: &ExecutionContext,
+    ) -> Result<Value, NexusError> {
         match filter {
             // String filters
             "upper" => Ok(Value::String(self.value_to_string(value).to_uppercase())),
@@ -861,7 +926,9 @@ impl TemplateEngine {
                 let mut chars = word.chars();
                 match chars.next() {
                     None => String::new(),
-                    Some(first) => first.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+                    Some(first) => {
+                        first.to_uppercase().to_string() + &chars.as_str().to_lowercase()
+                    }
                 }
             })
             .collect::<Vec<_>>()
@@ -869,13 +936,18 @@ impl TemplateEngine {
     }
 
     /// Evaluate a simple expression (variable lookup with optional attribute access)
-    fn evaluate_simple_expr(&self, expr: &str, ctx: &ExecutionContext) -> Result<Value, NexusError> {
+    fn evaluate_simple_expr(
+        &self,
+        expr: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<Value, NexusError> {
         let expr = expr.trim();
 
         // String literals
         if (expr.starts_with('"') && expr.ends_with('"'))
-            || (expr.starts_with('\'') && expr.ends_with('\'')) {
-            return Ok(Value::String(expr[1..expr.len()-1].to_string()));
+            || (expr.starts_with('\'') && expr.ends_with('\''))
+        {
+            return Ok(Value::String(expr[1..expr.len() - 1].to_string()));
         }
 
         // Number literals
@@ -901,7 +973,7 @@ impl TemplateEngine {
 
         // List literal [a, b, c]
         if expr.starts_with('[') && expr.ends_with(']') {
-            let inner = &expr[1..expr.len()-1];
+            let inner = &expr[1..expr.len() - 1];
             let items: Result<Vec<Value>, _> = inner
                 .split(',')
                 .map(|s| self.evaluate_simple_expr(s.trim(), ctx))
@@ -973,7 +1045,8 @@ impl TemplateEngine {
                 format!("[{}]", items.join(", "))
             }
             Value::Dict(d) => {
-                let items: Vec<String> = d.iter()
+                let items: Vec<String> = d
+                    .iter()
                     .map(|(k, v)| format!("{}: {}", k, self.value_to_string(v)))
                     .collect();
                 format!("{{{}}}", items.join(", "))
@@ -1025,8 +1098,8 @@ fn urlencoding_encode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use crate::inventory::Host;
+    use std::sync::Arc;
 
     fn test_ctx() -> ExecutionContext {
         let host = Arc::new(Host {
@@ -1039,11 +1112,14 @@ mod tests {
         });
         let mut vars = HashMap::new();
         vars.insert("name".to_string(), Value::String("World".to_string()));
-        vars.insert("items".to_string(), Value::List(vec![
-            Value::String("a".to_string()),
-            Value::String("b".to_string()),
-            Value::String("c".to_string()),
-        ]));
+        vars.insert(
+            "items".to_string(),
+            Value::List(vec![
+                Value::String("a".to_string()),
+                Value::String("b".to_string()),
+                Value::String("c".to_string()),
+            ]),
+        );
         ExecutionContext::new(host, vars)
     }
 
@@ -1079,7 +1155,9 @@ mod tests {
         let mut engine = TemplateEngine::new();
         let ctx = test_ctx();
 
-        let result = engine.render("{% for item in items %}{{ item }}{% endfor %}", &ctx).unwrap();
+        let result = engine
+            .render("{% for item in items %}{{ item }}{% endfor %}", &ctx)
+            .unwrap();
         assert_eq!(result, "abc");
     }
 
@@ -1088,7 +1166,12 @@ mod tests {
         let mut engine = TemplateEngine::new();
         let ctx = test_ctx();
 
-        let result = engine.render("{% for item in items %}{{ loop.index }}:{{ item }} {% endfor %}", &ctx).unwrap();
+        let result = engine
+            .render(
+                "{% for item in items %}{{ loop.index }}:{{ item }} {% endfor %}",
+                &ctx,
+            )
+            .unwrap();
         assert_eq!(result, "1:a 2:b 3:c ");
     }
 
@@ -1097,7 +1180,9 @@ mod tests {
         let mut engine = TemplateEngine::new();
         let ctx = test_ctx();
 
-        let result = engine.render("{% if name %}Hello {{ name }}{% endif %}", &ctx).unwrap();
+        let result = engine
+            .render("{% if name %}Hello {{ name }}{% endif %}", &ctx)
+            .unwrap();
         assert_eq!(result, "Hello World");
     }
 
@@ -1106,7 +1191,9 @@ mod tests {
         let mut engine = TemplateEngine::new();
         let ctx = test_ctx();
 
-        let result = engine.render("{{ missing | default('N/A') }}", &ctx).unwrap();
+        let result = engine
+            .render("{{ missing | default('N/A') }}", &ctx)
+            .unwrap();
         assert_eq!(result, "N/A");
     }
 

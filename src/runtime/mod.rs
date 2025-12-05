@@ -23,13 +23,11 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
         Expression::Boolean(b) => Ok(Value::Bool(*b)),
         Expression::Null => Ok(Value::Null),
 
-        Expression::Variable(path) => {
-            ctx.get_nested_var(path).ok_or_else(|| NexusError::Runtime {
-                function: None,
-                message: format!("Variable not found: {}", path.join(".")),
-                suggestion: Some("Check variable name and ensure it's defined".to_string()),
-            })
-        }
+        Expression::Variable(path) => ctx.get_nested_var(path).ok_or_else(|| NexusError::Runtime {
+            function: None,
+            message: format!("Variable not found: {}", path.join(".")),
+            suggestion: Some("Check variable name and ensure it's defined".to_string()),
+        }),
 
         Expression::InterpolatedString(parts) => {
             let mut result = String::new();
@@ -97,7 +95,11 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
                     };
                     list.get(idx).cloned().ok_or_else(|| NexusError::Runtime {
                         function: None,
-                        message: format!("Index {} out of bounds for list of length {}", i, list.len()),
+                        message: format!(
+                            "Index {} out of bounds for list of length {}",
+                            i,
+                            list.len()
+                        ),
                         suggestion: None,
                     })
                 }
@@ -202,7 +204,11 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
     }
 }
 
-fn evaluate_binary_op(left: &Value, op: &BinaryOperator, right: &Value) -> Result<Value, NexusError> {
+fn evaluate_binary_op(
+    left: &Value,
+    op: &BinaryOperator,
+    right: &Value,
+) -> Result<Value, NexusError> {
     match op {
         // Arithmetic operations
         BinaryOperator::Add => match (left, right) {
@@ -261,9 +267,7 @@ fn evaluate_binary_op(left: &Value, op: &BinaryOperator, right: &Value) -> Resul
         BinaryOperator::Eq => Ok(Value::Bool(values_equal(left, right))),
         BinaryOperator::Ne => Ok(Value::Bool(!values_equal(left, right))),
         BinaryOperator::Lt => compare_values(left, right, |ord| ord == std::cmp::Ordering::Less),
-        BinaryOperator::Le => {
-            compare_values(left, right, |ord| ord != std::cmp::Ordering::Greater)
-        }
+        BinaryOperator::Le => compare_values(left, right, |ord| ord != std::cmp::Ordering::Greater),
         BinaryOperator::Gt => compare_values(left, right, |ord| ord == std::cmp::Ordering::Greater),
         BinaryOperator::Ge => compare_values(left, right, |ord| ord != std::cmp::Ordering::Less),
 
@@ -327,7 +331,11 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         }
         (Value::Dict(a), Value::Dict(b)) => {
             a.len() == b.len()
-                && a.keys().all(|k| b.get(k).map(|v| values_equal(a.get(k).unwrap(), v)).unwrap_or(false))
+                && a.keys().all(|k| {
+                    b.get(k)
+                        .map(|v| values_equal(a.get(k).unwrap(), v))
+                        .unwrap_or(false)
+                })
         }
         _ => false,
     }

@@ -117,15 +117,10 @@ pub fn convert_import_tasks(
     source_file: &str,
 ) -> Result<TaskOrBlock, NexusError> {
     // Convert vars
-    let converted_vars = vars
-        .map(convert_vars)
-        .transpose()?
-        .unwrap_or_default();
+    let converted_vars = vars.map(convert_vars).transpose()?.unwrap_or_default();
 
     // Resolve the file path relative to the playbook directory
-    let playbook_dir = Path::new(source_file)
-        .parent()
-        .unwrap_or(Path::new("."));
+    let playbook_dir = Path::new(source_file).parent().unwrap_or(Path::new("."));
     let import_path = playbook_dir.join(&import_file);
 
     // Validate that the file exists
@@ -221,7 +216,11 @@ pub fn parse_task_file(path: &Path) -> Result<Vec<TaskOrBlock>, NexusError> {
 }
 
 /// Convert a RawTaskFile to a TaskOrBlock
-fn convert_task_file(raw: RawTaskFile, source_file: &str, index: usize) -> Result<TaskOrBlock, NexusError> {
+fn convert_task_file(
+    raw: RawTaskFile,
+    source_file: &str,
+    index: usize,
+) -> Result<TaskOrBlock, NexusError> {
     // Check if this is an import_tasks (static import)
     if let Some(ref import_file) = raw.import_tasks {
         let tags = match raw.tags {
@@ -261,7 +260,8 @@ fn convert_task_file(raw: RawTaskFile, source_file: &str, index: usize) -> Resul
     let name = raw.name.unwrap_or_else(|| format!("Task {}", index + 1));
 
     // Parse when condition
-    let when = raw.when_condition
+    let when = raw
+        .when_condition
         .map(|w| parse_condition(&w))
         .transpose()?;
 
@@ -273,14 +273,10 @@ fn convert_task_file(raw: RawTaskFile, source_file: &str, index: usize) -> Resul
     let register = raw.register;
 
     // Parse fail_when
-    let fail_when = raw.fail_when
-        .map(|f| parse_condition(&f))
-        .transpose()?;
+    let fail_when = raw.fail_when.map(|f| parse_condition(&f)).transpose()?;
 
     // Parse changed_when
-    let changed_when = raw.changed_when
-        .map(|c| parse_condition(&c))
-        .transpose()?;
+    let changed_when = raw.changed_when.map(|c| parse_condition(&c)).transpose()?;
 
     // Parse notify
     let notify = match raw.notify {
@@ -297,7 +293,8 @@ fn convert_task_file(raw: RawTaskFile, source_file: &str, index: usize) -> Resul
     };
 
     // Parse delegation
-    let delegate_to = raw.delegate_to
+    let delegate_to = raw
+        .delegate_to
         .map(|d| {
             if has_interpolation(&d) {
                 parse_interpolated_string(&d)
@@ -347,71 +344,74 @@ fn convert_task_file(raw: RawTaskFile, source_file: &str, index: usize) -> Resul
 }
 
 /// Convert a block from a RawTaskFile
-fn convert_block_file(raw: RawTaskFile, source_file: &str, _index: usize) -> Result<TaskOrBlock, NexusError> {
+fn convert_block_file(
+    raw: RawTaskFile,
+    source_file: &str,
+    _index: usize,
+) -> Result<TaskOrBlock, NexusError> {
     let name = raw.name;
 
     // Convert block tasks - only keep Task variants
-    let block_tasks: Result<Vec<Task>, NexusError> = raw.block
+    let block_tasks: Result<Vec<Task>, NexusError> = raw
+        .block
         .unwrap_or_default()
         .into_iter()
         .enumerate()
-        .map(|(i, t)| {
-            match convert_task_file(t, source_file, i)? {
-                TaskOrBlock::Task(task) => Ok(*task),
-                _ => Err(NexusError::Parse(Box::new(ParseError {
-                    kind: ParseErrorKind::InvalidValue,
-                    message: "Blocks can only contain tasks, not nested blocks/imports/includes".to_string(),
-                    file: Some(source_file.to_string()),
-                    line: None,
-                    column: None,
-                    suggestion: None,
-                }))),
-            }
+        .map(|(i, t)| match convert_task_file(t, source_file, i)? {
+            TaskOrBlock::Task(task) => Ok(*task),
+            _ => Err(NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::InvalidValue,
+                message: "Blocks can only contain tasks, not nested blocks/imports/includes"
+                    .to_string(),
+                file: Some(source_file.to_string()),
+                line: None,
+                column: None,
+                suggestion: None,
+            }))),
         })
         .collect();
 
     // Convert rescue tasks - only keep Task variants
-    let rescue_tasks: Result<Vec<Task>, NexusError> = raw.rescue
+    let rescue_tasks: Result<Vec<Task>, NexusError> = raw
+        .rescue
         .unwrap_or_default()
         .into_iter()
         .enumerate()
-        .map(|(i, t)| {
-            match convert_task_file(t, source_file, i)? {
-                TaskOrBlock::Task(task) => Ok(*task),
-                _ => Err(NexusError::Parse(Box::new(ParseError {
-                    kind: ParseErrorKind::InvalidValue,
-                    message: "Rescue blocks can only contain tasks".to_string(),
-                    file: Some(source_file.to_string()),
-                    line: None,
-                    column: None,
-                    suggestion: None,
-                }))),
-            }
+        .map(|(i, t)| match convert_task_file(t, source_file, i)? {
+            TaskOrBlock::Task(task) => Ok(*task),
+            _ => Err(NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::InvalidValue,
+                message: "Rescue blocks can only contain tasks".to_string(),
+                file: Some(source_file.to_string()),
+                line: None,
+                column: None,
+                suggestion: None,
+            }))),
         })
         .collect();
 
     // Convert always tasks - only keep Task variants
-    let always_tasks: Result<Vec<Task>, NexusError> = raw.always
+    let always_tasks: Result<Vec<Task>, NexusError> = raw
+        .always
         .unwrap_or_default()
         .into_iter()
         .enumerate()
-        .map(|(i, t)| {
-            match convert_task_file(t, source_file, i)? {
-                TaskOrBlock::Task(task) => Ok(*task),
-                _ => Err(NexusError::Parse(Box::new(ParseError {
-                    kind: ParseErrorKind::InvalidValue,
-                    message: "Always blocks can only contain tasks".to_string(),
-                    file: Some(source_file.to_string()),
-                    line: None,
-                    column: None,
-                    suggestion: None,
-                }))),
-            }
+        .map(|(i, t)| match convert_task_file(t, source_file, i)? {
+            TaskOrBlock::Task(task) => Ok(*task),
+            _ => Err(NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::InvalidValue,
+                message: "Always blocks can only contain tasks".to_string(),
+                file: Some(source_file.to_string()),
+                line: None,
+                column: None,
+                suggestion: None,
+            }))),
         })
         .collect();
 
     // Parse when condition
-    let when = raw.when_condition
+    let when = raw
+        .when_condition
         .map(|w| parse_condition(&w))
         .transpose()?;
 
@@ -469,10 +469,15 @@ fn parse_module_call_from_raw(
     // Add more module types as needed
     Err(NexusError::Parse(Box::new(ParseError {
         kind: ParseErrorKind::UnknownModule,
-        message: format!("Unknown or unsupported module. Available keys: {:?}", module.keys().collect::<Vec<_>>()),
+        message: format!(
+            "Unknown or unsupported module. Available keys: {:?}",
+            module.keys().collect::<Vec<_>>()
+        ),
         file: None,
         line: None,
         column: None,
-        suggestion: Some("Currently only 'command' module is supported in included task files".to_string()),
+        suggestion: Some(
+            "Currently only 'command' module is supported in included task files".to_string(),
+        ),
     })))
 }

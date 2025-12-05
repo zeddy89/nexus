@@ -205,10 +205,10 @@ impl ConnectionPool {
                     && session
                         .userauth_pubkey_file(&user, None, Path::new(&key_path), None)
                         .is_ok()
-                    {
-                        authenticated = true;
-                        break;
-                    }
+                {
+                    authenticated = true;
+                    break;
+                }
             }
         }
 
@@ -273,11 +273,14 @@ impl PooledConnection {
 
     /// Execute a command on this connection
     pub fn exec(&self, command: &str) -> Result<CommandResult, NexusError> {
-        let mut channel = self.session.channel_session().map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to open channel: {}", e),
-            suggestion: None,
-        })?;
+        let mut channel = self
+            .session
+            .channel_session()
+            .map_err(|e| NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!("Failed to open channel: {}", e),
+                suggestion: None,
+            })?;
 
         channel.exec(command).map_err(|e| NexusError::Ssh {
             host: self.host_name.clone(),
@@ -312,11 +315,14 @@ impl PooledConnection {
         F: FnMut(&[u8]),
         G: FnMut(&[u8]),
     {
-        let mut channel = self.session.channel_session().map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to open channel: {}", e),
-            suggestion: None,
-        })?;
+        let mut channel = self
+            .session
+            .channel_session()
+            .map_err(|e| NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!("Failed to open channel: {}", e),
+                suggestion: None,
+            })?;
 
         channel.exec(command).map_err(|e| NexusError::Ssh {
             host: self.host_name.clone(),
@@ -391,11 +397,13 @@ impl PooledConnection {
                 suggestion: None,
             })?;
 
-        remote_file.write_all(&content).map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to write remote file: {}", e),
-            suggestion: None,
-        })?;
+        remote_file
+            .write_all(&content)
+            .map_err(|e| NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!("Failed to write remote file: {}", e),
+                suggestion: None,
+            })?;
 
         Ok(())
     }
@@ -416,11 +424,13 @@ impl PooledConnection {
                 suggestion: None,
             })?;
 
-        remote_file.write_all(content).map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to write remote file: {}", e),
-            suggestion: None,
-        })?;
+        remote_file
+            .write_all(content)
+            .map_err(|e| NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!("Failed to write remote file: {}", e),
+                suggestion: None,
+            })?;
 
         Ok(())
     }
@@ -433,11 +443,13 @@ impl PooledConnection {
             suggestion: None,
         })?;
 
-        let mut remote_file = sftp.open(Path::new(remote_path)).map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to open remote file: {}", e),
-            suggestion: None,
-        })?;
+        let mut remote_file = sftp
+            .open(Path::new(remote_path))
+            .map_err(|e| NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!("Failed to open remote file: {}", e),
+                suggestion: None,
+            })?;
 
         let mut content = Vec::new();
         remote_file
@@ -581,7 +593,9 @@ impl Connection for SshConnection {
             }
         };
 
-        let exit_code = self.inner.exec_streaming(cmd, stdout_callback, stderr_callback)?;
+        let exit_code = self
+            .inner
+            .exec_streaming(cmd, stdout_callback, stderr_callback)?;
 
         Ok(CommandResult {
             stdout: String::new(),

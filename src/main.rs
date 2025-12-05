@@ -1,8 +1,8 @@
 // Nexus CLI - Next-Generation Infrastructure Automation
 
 use std::io::{self, Write};
-use std::str::FromStr;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,12 +10,15 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use parking_lot::Mutex;
 
+use nexus::converter::{ConversionOptions, ConversionReport, Converter, IssueSeverity};
 use nexus::executor::{Scheduler, SchedulerConfig, TagFilter};
-use nexus::inventory::{Inventory, NetworkScanner, DiscoveredHost, DiscoveryDaemon, Notifier, Host, HostGroup, ProbeType};
+use nexus::inventory::{
+    DiscoveredHost, DiscoveryDaemon, Host, HostGroup, Inventory, NetworkScanner, Notifier,
+    ProbeType,
+};
 use nexus::output::{NexusError, OutputFormat, OutputWriter};
-use nexus::parser::{parse_playbook_file, parse_playbook_file_with_vault};
 use nexus::parser::ast::{HostPattern, Playbook, TaskOrBlock, Value};
-use nexus::converter::{Converter, ConversionOptions, ConversionReport, IssueSeverity};
+use nexus::parser::{parse_playbook_file, parse_playbook_file_with_vault};
 
 #[derive(Parser)]
 #[command(
@@ -24,7 +27,7 @@ use nexus::converter::{Converter, ConversionOptions, ConversionReport, IssueSeve
     version,
     author,
     disable_colored_help = true,
-    term_width = 0,
+    term_width = 0
 )]
 struct Cli {
     #[command(subcommand)]
@@ -61,7 +64,7 @@ enum Commands {
 
         /// Discover hosts from subnet instead of inventory
         #[arg(long)]
-        discover: Option<String>,  // e.g., "10.20.30.0/24"
+        discover: Option<String>, // e.g., "10.20.30.0/24"
 
         /// Filter discovered hosts
         #[arg(long)]
@@ -458,7 +461,10 @@ async fn main() {
 
     // Parse output format
     let output_format = OutputFormat::from_str(&cli.output_format).unwrap_or_else(|_| {
-        eprintln!("Invalid output format: {}. Using 'text'.", cli.output_format);
+        eprintln!(
+            "Invalid output format: {}. Using 'text'.",
+            cli.output_format
+        );
         OutputFormat::Text
     });
 
@@ -620,23 +626,21 @@ async fn main() {
             quiet,
             verbose,
             assess,
-        } => {
-            handle_convert_command(
-                source,
-                output,
-                dry_run,
-                interactive,
-                all,
-                include_inventory,
-                include_templates,
-                keep_jinja2,
-                report,
-                strict,
-                quiet,
-                verbose,
-                assess,
-            )
-        }
+        } => handle_convert_command(
+            source,
+            output,
+            dry_run,
+            interactive,
+            all,
+            include_inventory,
+            include_templates,
+            keep_jinja2,
+            report,
+            strict,
+            quiet,
+            verbose,
+            assess,
+        ),
     };
 
     if let Err(e) = result {
@@ -670,7 +674,8 @@ async fn resolve_inventory(
         // Filter hosts if filter is provided
         let filtered_hosts = if let Some(filter_str) = discover_filter {
             // Simple filtering by OS family for now
-            discovered_hosts.into_iter()
+            discovered_hosts
+                .into_iter()
                 .filter(|h| {
                     if let Some(ref os) = h.os_classification {
                         os.os_family.contains(filter_str)
@@ -684,7 +689,10 @@ async fn resolve_inventory(
         };
 
         // Convert discovered hosts to inventory
-        return Ok(inventory_from_discovered_hosts(&filtered_hosts, default_user));
+        return Ok(inventory_from_discovered_hosts(
+            &filtered_hosts,
+            default_user,
+        ));
     }
 
     // 2. CLI --hosts flag
@@ -713,7 +721,8 @@ async fn resolve_inventory(
         message: "No inventory source provided".to_string(),
         suggestion: Some(
             "Use --discover to scan a subnet, --inventory/-i to specify an inventory file, \
-             --hosts/-H for a comma-separated host list, or define hosts inline in your playbook".to_string()
+             --hosts/-H for a comma-separated host list, or define hosts inline in your playbook"
+                .to_string(),
         ),
     })
 }
@@ -750,11 +759,15 @@ fn inventory_from_discovered_hosts(
 
         // Add OS classification as a variable if available
         if let Some(ref os) = dhost.os_classification {
-            host.vars.insert("discovered_os".to_string(),
-                nexus::parser::ast::Value::String(os.os_family.clone()));
+            host.vars.insert(
+                "discovered_os".to_string(),
+                nexus::parser::ast::Value::String(os.os_family.clone()),
+            );
             if let Some(ref dist) = os.distribution {
-                host.vars.insert("discovered_distribution".to_string(),
-                    nexus::parser::ast::Value::String(dist.clone()));
+                host.vars.insert(
+                    "discovered_distribution".to_string(),
+                    nexus::parser::ast::Value::String(dist.clone()),
+                );
             }
         }
 
@@ -833,7 +846,8 @@ async fn run_playbook(
         discover_filter.as_deref(),
         &playbook,
         user.as_deref(),
-    ).await?;
+    )
+    .await?;
 
     // Create output handler (silent when TUI is active to avoid conflicting output)
     let output = if use_tui {
@@ -864,13 +878,22 @@ async fn run_playbook(
         match nexus::plugins::callbacks::create_callback_plugin(&spec) {
             Ok(plugin) => {
                 if verbose && !use_tui {
-                    println!("  {} Loaded callback plugin: {}", "✓".green(), plugin.name());
+                    println!(
+                        "  {} Loaded callback plugin: {}",
+                        "✓".green(),
+                        plugin.name()
+                    );
                 }
                 callback_manager.add(plugin);
             }
             Err(e) => {
                 if !use_tui {
-                    eprintln!("{} Failed to load callback plugin '{}': {}", "✗".red(), spec, e);
+                    eprintln!(
+                        "{} Failed to load callback plugin '{}': {}",
+                        "✗".red(),
+                        spec,
+                        e
+                    );
                 }
                 std::process::exit(1);
             }
@@ -898,7 +921,8 @@ async fn run_playbook(
     };
 
     // Create scheduler with callbacks
-    let mut scheduler = Scheduler::with_callbacks(config, output.clone(), Arc::new(callback_manager));
+    let mut scheduler =
+        Scheduler::with_callbacks(config, output.clone(), Arc::new(callback_manager));
 
     // Add role search path relative to playbook location
     scheduler.add_playbook_role_path(&playbook_path);
@@ -937,11 +961,7 @@ async fn run_playbook(
 }
 
 fn validate_playbook(playbook_path: PathBuf) -> Result<(), NexusError> {
-    println!(
-        "{} {}",
-        "Validating:".cyan(),
-        playbook_path.display()
-    );
+    println!("{} {}", "Validating:".cyan(), playbook_path.display());
 
     let playbook = parse_playbook_file(&playbook_path)?;
 
@@ -953,13 +973,21 @@ fn validate_playbook(playbook_path: PathBuf) -> Result<(), NexusError> {
     println!(
         "  {} {}",
         "Functions:".dimmed(),
-        playbook.functions.as_ref().map(|f| f.functions.len()).unwrap_or(0)
+        playbook
+            .functions
+            .as_ref()
+            .map(|f| f.functions.len())
+            .unwrap_or(0)
     );
 
     Ok(())
 }
 
-fn list_inventory(inventory_path: PathBuf, pattern: &str, show_vars: bool) -> Result<(), NexusError> {
+fn list_inventory(
+    inventory_path: PathBuf,
+    pattern: &str,
+    show_vars: bool,
+) -> Result<(), NexusError> {
     let inventory = Inventory::from_file(&inventory_path)?;
 
     let pattern = nexus::inventory::parse_host_pattern(pattern);
@@ -1001,12 +1029,7 @@ fn list_inventory(inventory_path: PathBuf, pattern: &str, show_vars: bool) -> Re
     for name in inventory.group_names() {
         if name != "all" {
             if let Some(group) = inventory.groups.get(name) {
-                println!(
-                    "  {} {} ({} hosts)",
-                    "•".cyan(),
-                    name,
-                    group.hosts.len()
-                );
+                println!("  {} {} ({} hosts)", "•".cyan(), name, group.hosts.len());
             }
         }
     }
@@ -1049,11 +1072,19 @@ fn parse_and_display(playbook_path: PathBuf, format: &str) -> Result<(), NexusEr
                     }
                     TaskOrBlock::Import(import) => {
                         task_num += 1;
-                        println!("    {} import_tasks: {}", format!("{}.", task_num).cyan(), import.file);
+                        println!(
+                            "    {} import_tasks: {}",
+                            format!("{}.", task_num).cyan(),
+                            import.file
+                        );
                     }
                     TaskOrBlock::Include(include) => {
                         task_num += 1;
-                        println!("    {} include_tasks: {:?}", format!("{}.", task_num).cyan(), include.file);
+                        println!(
+                            "    {} include_tasks: {:?}",
+                            format!("{}.", task_num).cyan(),
+                            include.file
+                        );
                     }
                 }
             }
@@ -1072,7 +1103,11 @@ fn parse_and_display(playbook_path: PathBuf, format: &str) -> Result<(), NexusEr
             println!("  \"hosts\": \"{:?}\",", playbook.hosts);
             println!("  \"tasks\": [");
             for (i, item) in playbook.tasks.iter().enumerate() {
-                let comma = if i < playbook.tasks.len() - 1 { "," } else { "" };
+                let comma = if i < playbook.tasks.len() - 1 {
+                    ","
+                } else {
+                    ""
+                };
                 match item {
                     TaskOrBlock::Task(task) => {
                         println!("  - Task: {}", task.name);
@@ -1081,7 +1116,10 @@ fn parse_and_display(playbook_path: PathBuf, format: &str) -> Result<(), NexusEr
                         println!("    {{ \"name\": \"(block)\" }}{}", comma);
                     }
                     TaskOrBlock::Import(import) => {
-                        println!("    {{ \"name\": \"import_tasks: {}\" }}{}", import.file, comma);
+                        println!(
+                            "    {{ \"name\": \"import_tasks: {}\" }}{}",
+                            import.file, comma
+                        );
                     }
                     TaskOrBlock::Include(_) => {
                         println!("    {{ \"name\": \"include_tasks\" }}{}", comma);
@@ -1293,9 +1331,21 @@ fn handle_checkpoint_command(action: CheckpointAction) -> Result<(), NexusError>
 
             for info in checkpoints {
                 println!("  {} {}", "•".cyan(), info.path.display());
-                println!("    {} {}", "Playbook:".dimmed(), info.playbook_path.display());
-                println!("    {} {}", "Timestamp:".dimmed(), info.timestamp.format("%Y-%m-%d %H:%M:%S"));
-                println!("    {} {}", "Tasks completed:".dimmed(), info.completed_tasks);
+                println!(
+                    "    {} {}",
+                    "Playbook:".dimmed(),
+                    info.playbook_path.display()
+                );
+                println!(
+                    "    {} {}",
+                    "Timestamp:".dimmed(),
+                    info.timestamp.format("%Y-%m-%d %H:%M:%S")
+                );
+                println!(
+                    "    {} {}",
+                    "Tasks completed:".dimmed(),
+                    info.completed_tasks
+                );
 
                 if let Some(ref task) = info.last_task {
                     println!("    {} {}", "Last task:".dimmed(), task);
@@ -1315,14 +1365,38 @@ fn handle_checkpoint_command(action: CheckpointAction) -> Result<(), NexusError>
             println!("{} {}", "Checkpoint:".cyan(), file.display());
             println!();
             println!("  {} {}", "Version:".dimmed(), checkpoint.version);
-            println!("  {} {}", "Playbook:".dimmed(), checkpoint.playbook_path.display());
-            println!("  {} {}", "Inventory:".dimmed(), checkpoint.inventory_path.display());
+            println!(
+                "  {} {}",
+                "Playbook:".dimmed(),
+                checkpoint.playbook_path.display()
+            );
+            println!(
+                "  {} {}",
+                "Inventory:".dimmed(),
+                checkpoint.inventory_path.display()
+            );
             println!("  {} {}", "Hash:".dimmed(), checkpoint.playbook_hash);
-            println!("  {} {}", "Timestamp:".dimmed(), checkpoint.timestamp.format("%Y-%m-%d %H:%M:%S"));
-            println!("  {} {}", "Tasks completed:".dimmed(), checkpoint.completed_tasks.len());
+            println!(
+                "  {} {}",
+                "Timestamp:".dimmed(),
+                checkpoint.timestamp.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!(
+                "  {} {}",
+                "Tasks completed:".dimmed(),
+                checkpoint.completed_tasks.len()
+            );
             println!("  {} {}", "Variables:".dimmed(), checkpoint.variables.len());
-            println!("  {} {}", "Registered results:".dimmed(), checkpoint.registered_results.len());
-            println!("  {} {}", "Handler notifications:".dimmed(), checkpoint.handler_notifications.len());
+            println!(
+                "  {} {}",
+                "Registered results:".dimmed(),
+                checkpoint.registered_results.len()
+            );
+            println!(
+                "  {} {}",
+                "Handler notifications:".dimmed(),
+                checkpoint.handler_notifications.len()
+            );
 
             if let Some(ref task) = checkpoint.last_task {
                 println!();
@@ -1335,13 +1409,25 @@ fn handle_checkpoint_command(action: CheckpointAction) -> Result<(), NexusError>
             Ok(())
         }
 
-        CheckpointAction::Clean { playbook, older_than } => {
+        CheckpointAction::Clean {
+            playbook,
+            older_than,
+        } => {
             if let Some(days) = older_than {
                 let cleaned = manager.clean_old(days)?;
-                println!("{} Cleaned {} checkpoint(s) older than {} days", "✓".green(), cleaned, days);
+                println!(
+                    "{} Cleaned {} checkpoint(s) older than {} days",
+                    "✓".green(),
+                    cleaned,
+                    days
+                );
             } else if let Some(playbook_path) = playbook {
                 manager.cleanup(&playbook_path)?;
-                println!("{} Cleaned checkpoint for {}", "✓".green(), playbook_path.display());
+                println!(
+                    "{} Cleaned checkpoint for {}",
+                    "✓".green(),
+                    playbook_path.display()
+                );
             } else {
                 return Err(NexusError::Runtime {
                     function: None,
@@ -1400,17 +1486,15 @@ async fn handle_plan_command(
     let inventory = resolve_inventory(
         inventory_path.as_deref(),
         cli_hosts.as_deref(),
-        None,  // discover_subnet not supported in plan command
-        None,  // discover_filter not supported in plan command
+        None, // discover_subnet not supported in plan command
+        None, // discover_filter not supported in plan command
         &playbook,
         user.as_deref(),
-    ).await?;
+    )
+    .await?;
 
     if verbose {
-        println!(
-            "  {} Generating execution plan...",
-            "Planning:".cyan()
-        );
+        println!("  {} Generating execution plan...", "Planning:".cyan());
         println!();
     }
 
@@ -1419,7 +1503,9 @@ async fn handle_plan_command(
     let ssh_config = SshConfig {
         user,
         password: ssh_password.clone(),
-        private_key: private_key.as_ref().map(|p| p.to_string_lossy().to_string()),
+        private_key: private_key
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
     };
 
     // Generate plan
@@ -1523,11 +1609,10 @@ async fn handle_discover_command(
     }
 
     if let Some(file_path) = subnets_from {
-        let content = std::fs::read_to_string(&file_path)
-            .map_err(|e| NexusError::Io {
-                message: format!("Failed to read subnets file: {}", e),
-                path: Some(file_path.clone()),
-            })?;
+        let content = std::fs::read_to_string(&file_path).map_err(|e| NexusError::Io {
+            message: format!("Failed to read subnets file: {}", e),
+            path: Some(file_path.clone()),
+        })?;
 
         for line in content.lines() {
             let line = line.trim();
@@ -1560,10 +1645,7 @@ async fn handle_discover_command(
         let interval_duration = parse_interval(&interval)?;
 
         // Create daemon
-        let mut daemon = DiscoveryDaemon::new(
-            watch_subnets,
-            interval_duration,
-        );
+        let mut daemon = DiscoveryDaemon::new(watch_subnets, interval_duration);
 
         // Add notifier if specified
         if let Some(notify_spec) = notify_on_change {
@@ -1609,18 +1691,28 @@ async fn handle_discover_command(
 
     // Print results
     println!();
-    println!("{} {} host(s) discovered", "Results:".green().bold(), filtered_hosts.len());
+    println!(
+        "{} {} host(s) discovered",
+        "Results:".green().bold(),
+        filtered_hosts.len()
+    );
     println!();
 
     for host in &filtered_hosts {
-        println!("  {} {}", "•".cyan(), host.address.to_string().white().bold());
+        println!(
+            "  {} {}",
+            "•".cyan(),
+            host.address.to_string().white().bold()
+        );
 
         if let Some(hostname) = &host.hostname {
             println!("    {} {}", "Hostname:".dimmed(), hostname);
         }
 
         if !host.open_ports.is_empty() {
-            let ports: Vec<String> = host.open_ports.iter()
+            let ports: Vec<String> = host
+                .open_ports
+                .iter()
                 .map(|p| {
                     if let Some(ref service) = p.service {
                         format!("{}/{}", p.port, service)
@@ -1634,9 +1726,18 @@ async fn handle_discover_command(
 
         if let Some(os) = &host.os_classification {
             let os_str = if let Some(ref dist) = os.distribution {
-                format!("{} ({}) - {}% confident", os.os_family, dist, (os.confidence * 100.0) as u8)
+                format!(
+                    "{} ({}) - {}% confident",
+                    os.os_family,
+                    dist,
+                    (os.confidence * 100.0) as u8
+                )
             } else {
-                format!("{} - {}% confident", os.os_family, (os.confidence * 100.0) as u8)
+                format!(
+                    "{} - {}% confident",
+                    os.os_family,
+                    (os.confidence * 100.0) as u8
+                )
             };
             println!("    {} {}", "OS:".dimmed(), os_str);
         }
@@ -1679,12 +1780,11 @@ fn parse_interval(interval: &str) -> Result<Duration, NexusError> {
         (interval, "s") // Default to seconds
     };
 
-    let num: u64 = num_str.parse()
-        .map_err(|_| NexusError::Runtime {
-            function: None,
-            message: format!("Invalid interval number: {}", num_str),
-            suggestion: Some("Use a positive integer".to_string()),
-        })?;
+    let num: u64 = num_str.parse().map_err(|_| NexusError::Runtime {
+        function: None,
+        message: format!("Invalid interval number: {}", num_str),
+        suggestion: Some("Use a positive integer".to_string()),
+    })?;
 
     let multiplier = match unit.trim() {
         "s" | "sec" | "second" | "seconds" => 1,
@@ -1706,9 +1806,13 @@ fn parse_interval(interval: &str) -> Result<Duration, NexusError> {
 /// Parse notifier specification
 fn parse_notifier(spec: &str) -> Result<Notifier, NexusError> {
     if let Some(url) = spec.strip_prefix("webhook:") {
-        Ok(Notifier::Webhook { url: url.to_string() })
+        Ok(Notifier::Webhook {
+            url: url.to_string(),
+        })
     } else if let Some(path) = spec.strip_prefix("file:") {
-        Ok(Notifier::File { path: PathBuf::from(path) })
+        Ok(Notifier::File {
+            path: PathBuf::from(path),
+        })
     } else if spec == "stdout" {
         Ok(Notifier::Stdout)
     } else {
@@ -1757,7 +1861,10 @@ fn parse_probe_type(probe: &str) -> Result<ProbeType, NexusError> {
 }
 
 /// Apply filter expression to hosts
-fn apply_filter(hosts: &[DiscoveredHost], filter_expr: &str) -> Result<Vec<DiscoveredHost>, NexusError> {
+fn apply_filter(
+    hosts: &[DiscoveredHost],
+    filter_expr: &str,
+) -> Result<Vec<DiscoveredHost>, NexusError> {
     let mut filtered = Vec::new();
 
     for host in hosts {
@@ -1815,11 +1922,12 @@ fn convert_to_inventory(hosts: &[DiscoveredHost]) -> Inventory {
     let mut inventory = Inventory::new();
 
     for discovered in hosts {
-        let name = discovered.hostname.clone()
+        let name = discovered
+            .hostname
+            .clone()
             .unwrap_or_else(|| discovered.address.to_string());
 
-        let mut host = Host::new(name.clone())
-            .with_address(discovered.address.to_string());
+        let mut host = Host::new(name.clone()).with_address(discovered.address.to_string());
 
         // Set SSH port if available
         if let Some(ssh_port) = discovered.open_ports.iter().find(|p| p.port == 22) {
@@ -1830,26 +1938,31 @@ fn convert_to_inventory(hosts: &[DiscoveredHost]) -> Inventory {
         if let Some(ref os) = discovered.os_classification {
             host.vars.insert(
                 "discovered_os_family".to_string(),
-                Value::String(os.os_family.clone())
+                Value::String(os.os_family.clone()),
             );
             if let Some(ref dist) = os.distribution {
                 host.vars.insert(
                     "discovered_os_dist".to_string(),
-                    Value::String(dist.clone())
+                    Value::String(dist.clone()),
                 );
             }
             host.vars.insert(
                 "discovered_os_confidence".to_string(),
-                Value::String(format!("{:.2}", os.confidence))
+                Value::String(format!("{:.2}", os.confidence)),
             );
         }
 
         if !discovered.open_ports.is_empty() {
-            let ports_str = discovered.open_ports.iter()
+            let ports_str = discovered
+                .open_ports
+                .iter()
                 .map(|p| p.port.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            host.vars.insert("discovered_open_ports".to_string(), Value::String(ports_str));
+            host.vars.insert(
+                "discovered_open_ports".to_string(),
+                Value::String(ports_str),
+            );
         }
 
         host.groups.push("discovered".to_string());
@@ -1860,7 +1973,8 @@ fn convert_to_inventory(hosts: &[DiscoveredHost]) -> Inventory {
     // Create "discovered" group
     let discovered_group = HostGroup {
         name: "discovered".to_string(),
-        hosts: hosts.iter()
+        hosts: hosts
+            .iter()
             .map(|h| h.hostname.clone().unwrap_or_else(|| h.address.to_string()))
             .collect(),
         children: Vec::new(),
@@ -1881,11 +1995,20 @@ fn save_inventory_to_file(inventory: &Inventory, path: &Path) -> Result<(), Nexu
     let mut all_hosts = HashMap::new();
     for host in inventory.hosts.values() {
         let mut host_map = HashMap::new();
-        host_map.insert("ansible_host".to_string(), serde_yaml::Value::String(host.address.clone()));
-        host_map.insert("ansible_port".to_string(), serde_yaml::Value::Number(host.port.into()));
+        host_map.insert(
+            "ansible_host".to_string(),
+            serde_yaml::Value::String(host.address.clone()),
+        );
+        host_map.insert(
+            "ansible_port".to_string(),
+            serde_yaml::Value::Number(host.port.into()),
+        );
 
         if !host.user.is_empty() {
-            host_map.insert("ansible_user".to_string(), serde_yaml::Value::String(host.user.clone()));
+            host_map.insert(
+                "ansible_user".to_string(),
+                serde_yaml::Value::String(host.user.clone()),
+            );
         }
 
         // Add custom vars
@@ -1901,33 +2024,49 @@ fn save_inventory_to_file(inventory: &Inventory, path: &Path) -> Result<(), Nexu
             host_map.insert(key.clone(), yaml_val);
         }
 
-        all_hosts.insert(host.name.clone(), serde_yaml::Value::Mapping(
-            host_map.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
-        ));
+        all_hosts.insert(
+            host.name.clone(),
+            serde_yaml::Value::Mapping(
+                host_map
+                    .into_iter()
+                    .map(|(k, v)| (serde_yaml::Value::String(k), v))
+                    .collect(),
+            ),
+        );
     }
 
     let mut all_group = HashMap::new();
-    all_group.insert("hosts".to_string(), serde_yaml::Value::Mapping(
-        all_hosts.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
-    ));
+    all_group.insert(
+        "hosts".to_string(),
+        serde_yaml::Value::Mapping(
+            all_hosts
+                .into_iter()
+                .map(|(k, v)| (serde_yaml::Value::String(k), v))
+                .collect(),
+        ),
+    );
 
-    yaml_map.insert("all".to_string(), serde_yaml::Value::Mapping(
-        all_group.into_iter().map(|(k, v)| (serde_yaml::Value::String(k), v)).collect()
-    ));
+    yaml_map.insert(
+        "all".to_string(),
+        serde_yaml::Value::Mapping(
+            all_group
+                .into_iter()
+                .map(|(k, v)| (serde_yaml::Value::String(k), v))
+                .collect(),
+        ),
+    );
 
     // Write to file
-    let yaml_string = serde_yaml::to_string(&yaml_map)
-        .map_err(|e| NexusError::Runtime {
-            function: None,
-            message: format!("Failed to serialize inventory: {}", e),
-            suggestion: None,
-        })?;
+    let yaml_string = serde_yaml::to_string(&yaml_map).map_err(|e| NexusError::Runtime {
+        function: None,
+        message: format!("Failed to serialize inventory: {}", e),
+        suggestion: None,
+    })?;
 
-    std::fs::write(path, yaml_string)
-        .map_err(|e| NexusError::Io {
-            message: format!("Failed to write inventory file: {}", e),
-            path: Some(path.to_path_buf()),
-        })?;
+    std::fs::write(path, yaml_string).map_err(|e| NexusError::Io {
+        message: format!("Failed to write inventory file: {}", e),
+        path: Some(path.to_path_buf()),
+    })?;
 
     Ok(())
 }
@@ -1960,7 +2099,9 @@ fn handle_convert_command(
         return Err(NexusError::Runtime {
             function: None,
             message: format!("Source path does not exist: {}", source.display()),
-            suggestion: Some("Verify the path to the Ansible playbook or project directory".to_string()),
+            suggestion: Some(
+                "Verify the path to the Ansible playbook or project directory".to_string(),
+            ),
         });
     }
 
@@ -1990,9 +2131,15 @@ fn handle_convert_command(
     } else {
         if !quiet {
             if dry_run {
-                println!("{} Running in dry-run mode (no files will be written)", "Dry Run:".yellow());
+                println!(
+                    "{} Running in dry-run mode (no files will be written)",
+                    "Dry Run:".yellow()
+                );
             } else {
-                println!("{} Converting Ansible to Nexus format...", "Converting:".cyan());
+                println!(
+                    "{} Converting Ansible to Nexus format...",
+                    "Converting:".cyan()
+                );
             }
             println!();
         }
@@ -2009,14 +2156,21 @@ fn handle_convert_command(
         write_conversion_report(&report, &report_file)?;
         if !quiet {
             println!();
-            println!("  {} Detailed report written to {}", "✓".green(), report_file.display());
+            println!(
+                "  {} Detailed report written to {}",
+                "✓".green(),
+                report_file.display()
+            );
         }
     }
 
     // Handle strict mode - exit with error if there were warnings
     if strict && report.has_warnings() {
         println!();
-        println!("{}", "Conversion failed: warnings detected in strict mode".red());
+        println!(
+            "{}",
+            "Conversion failed: warnings detected in strict mode".red()
+        );
         std::process::exit(1);
     }
 
@@ -2036,23 +2190,45 @@ fn print_conversion_summary(report: &ConversionReport, assess_only: bool) {
 
     if assess_only {
         println!("  {} Files analyzed: {}", "•".cyan(), report.files.len());
-        println!("  {} Playbooks found: {}", "•".cyan(), report.total_playbooks);
+        println!(
+            "  {} Playbooks found: {}",
+            "•".cyan(),
+            report.total_playbooks
+        );
         println!("  {} Roles found: {}", "•".cyan(), report.total_roles);
         println!("  {} Tasks total: {}", "•".cyan(), report.total_tasks);
     } else {
         println!("  {} Files converted: {}", "✓".green(), report.files.len());
-        println!("  {} Tasks converted: {}", "✓".green(), report.total_converted());
+        println!(
+            "  {} Tasks converted: {}",
+            "✓".green(),
+            report.total_converted()
+        );
         let need_review = report.total_need_review();
         if need_review > 0 {
             println!("  {} Tasks need review: {}", "⚠".yellow(), need_review);
         }
     }
 
-    let warning_count: usize = report.files.iter()
-        .map(|f| f.issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Warning)).count())
+    let warning_count: usize = report
+        .files
+        .iter()
+        .map(|f| {
+            f.issues
+                .iter()
+                .filter(|i| matches!(i.severity, IssueSeverity::Warning))
+                .count()
+        })
         .sum();
-    let error_count: usize = report.files.iter()
-        .map(|f| f.issues.iter().filter(|i| matches!(i.severity, IssueSeverity::Error)).count())
+    let error_count: usize = report
+        .files
+        .iter()
+        .map(|f| {
+            f.issues
+                .iter()
+                .filter(|i| matches!(i.severity, IssueSeverity::Error))
+                .count()
+        })
         .sum();
 
     if warning_count > 0 {
@@ -2064,7 +2240,9 @@ fn print_conversion_summary(report: &ConversionReport, assess_only: bool) {
     }
 
     // Print detailed warnings and errors if any
-    let warnings: Vec<_> = report.files.iter()
+    let warnings: Vec<_> = report
+        .files
+        .iter()
         .flat_map(|f| f.issues.iter())
         .filter(|i| matches!(i.severity, IssueSeverity::Warning))
         .collect();
@@ -2077,13 +2255,19 @@ fn print_conversion_summary(report: &ConversionReport, assess_only: bool) {
         }
     } else if warnings.len() > 10 {
         println!();
-        println!("{}: {} total (showing first 10)", "Warnings".yellow().bold(), warnings.len());
+        println!(
+            "{}: {} total (showing first 10)",
+            "Warnings".yellow().bold(),
+            warnings.len()
+        );
         for issue in warnings.iter().take(10) {
             println!("  {} {}", "⚠".yellow(), issue.message);
         }
     }
 
-    let errors: Vec<_> = report.files.iter()
+    let errors: Vec<_> = report
+        .files
+        .iter()
         .flat_map(|f| f.issues.iter())
         .filter(|i| matches!(i.severity, IssueSeverity::Error))
         .collect();
@@ -2096,7 +2280,11 @@ fn print_conversion_summary(report: &ConversionReport, assess_only: bool) {
         }
     } else if errors.len() > 10 {
         println!();
-        println!("{}: {} total (showing first 10)", "Errors".red().bold(), errors.len());
+        println!(
+            "{}: {} total (showing first 10)",
+            "Errors".red().bold(),
+            errors.len()
+        );
         for issue in errors.iter().take(10) {
             println!("  {} {}", "✗".red(), issue.message);
         }
@@ -2119,11 +2307,10 @@ fn write_conversion_report(report: &ConversionReport, path: &Path) -> Result<(),
 
     let markdown = report.to_markdown();
 
-    let mut file = std::fs::File::create(path)
-        .map_err(|e| NexusError::Io {
-            message: format!("Failed to create report file: {}", e),
-            path: Some(path.to_path_buf()),
-        })?;
+    let mut file = std::fs::File::create(path).map_err(|e| NexusError::Io {
+        message: format!("Failed to create report file: {}", e),
+        path: Some(path.to_path_buf()),
+    })?;
 
     file.write_all(markdown.as_bytes())
         .map_err(|e| NexusError::Io {

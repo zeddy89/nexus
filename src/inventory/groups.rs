@@ -76,7 +76,10 @@ pub fn parse_host_pattern(pattern: &str) -> HostPattern {
     }
 
     // Check if it looks like a group name (alphanumeric + underscore)
-    if pattern.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if pattern
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return HostPattern::Group(pattern.to_string());
     }
 

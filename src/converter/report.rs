@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
-use std::fmt;
 use chrono::{DateTime, Local};
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 /// Severity of a conversion issue
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,7 +129,9 @@ impl ConversionResult {
     }
 
     pub fn has_warnings(&self) -> bool {
-        self.issues.iter().any(|i| matches!(i.severity, IssueSeverity::Warning | IssueSeverity::Error))
+        self.issues
+            .iter()
+            .any(|i| matches!(i.severity, IssueSeverity::Warning | IssueSeverity::Error))
     }
 
     pub fn conversion_percentage(&self) -> f64 {
@@ -194,7 +196,8 @@ impl ConversionReport {
     }
 
     pub fn all_unsupported_modules(&self) -> Vec<String> {
-        let mut modules: Vec<String> = self.files
+        let mut modules: Vec<String> = self
+            .files
             .iter()
             .flat_map(|f| f.unsupported_modules.clone())
             .collect();
@@ -204,7 +207,8 @@ impl ConversionReport {
     }
 
     pub fn all_unsupported_filters(&self) -> Vec<String> {
-        let mut filters: Vec<String> = self.files
+        let mut filters: Vec<String> = self
+            .files
             .iter()
             .flat_map(|f| f.unsupported_filters.clone())
             .collect();
@@ -220,11 +224,17 @@ impl ConversionReport {
         output.push_str("╔══════════════════════════════════════════════════════════════════╗\n");
         output.push_str("║                    Nexus Conversion Report                       ║\n");
         output.push_str("╠══════════════════════════════════════════════════════════════════╣\n");
-        output.push_str(&format!("║  Source: {:56} ║\n", truncate_path(&self.source, 56)));
+        output.push_str(&format!(
+            "║  Source: {:56} ║\n",
+            truncate_path(&self.source, 56)
+        ));
         if let Some(out) = &self.output {
             output.push_str(&format!("║  Output: {:56} ║\n", truncate_path(out, 56)));
         }
-        output.push_str(&format!("║  Time:   {:56} ║\n", self.timestamp.format("%Y-%m-%d %H:%M:%S")));
+        output.push_str(&format!(
+            "║  Time:   {:56} ║\n",
+            self.timestamp.format("%Y-%m-%d %H:%M:%S")
+        ));
         output.push_str("╚══════════════════════════════════════════════════════════════════╝\n\n");
 
         if self.assessment_only {
@@ -245,9 +255,18 @@ impl ConversionReport {
             let review_pct = (review as f64 / total as f64 * 100.0) as usize;
 
             output.push_str(&format!("  Total tasks:        {}\n", total));
-            output.push_str(&format!("  ✓ Converted:        {} ({}%)\n", converted, converted_pct));
-            output.push_str(&format!("  ~ Modified:         {} ({}%)\n", modified, modified_pct));
-            output.push_str(&format!("  ⚠ Needs review:     {} ({}%)\n", review, review_pct));
+            output.push_str(&format!(
+                "  ✓ Converted:        {} ({}%)\n",
+                converted, converted_pct
+            ));
+            output.push_str(&format!(
+                "  ~ Modified:         {} ({}%)\n",
+                modified, modified_pct
+            ));
+            output.push_str(&format!(
+                "  ⚠ Needs review:     {} ({}%)\n",
+                review, review_pct
+            ));
         } else {
             output.push_str("  No tasks found to convert.\n");
         }
@@ -258,11 +277,19 @@ impl ConversionReport {
         for file_result in &self.files {
             if !file_result.issues.is_empty() {
                 output.push_str(&format!("\n{}\n", file_result.source_path.display()));
-                output.push_str("───────────────────────────────────────────────────────────────────\n");
+                output.push_str(
+                    "───────────────────────────────────────────────────────────────────\n",
+                );
 
                 for issue in &file_result.issues {
-                    let line_info = issue.line.map(|l| format!("Line {}: ", l)).unwrap_or_default();
-                    output.push_str(&format!("  {} {}{}\n", issue.severity, line_info, issue.message));
+                    let line_info = issue
+                        .line
+                        .map(|l| format!("Line {}: ", l))
+                        .unwrap_or_default();
+                    output.push_str(&format!(
+                        "  {} {}{}\n",
+                        issue.severity, line_info, issue.message
+                    ));
 
                     if let Some(original) = &issue.original {
                         output.push_str(&format!("    Before: {}\n", original));
@@ -283,7 +310,8 @@ impl ConversionReport {
 
         if !unsupported_modules.is_empty() || !unsupported_filters.is_empty() {
             output.push_str("\nUNSUPPORTED ITEMS\n");
-            output.push_str("───────────────────────────────────────────────────────────────────\n");
+            output
+                .push_str("───────────────────────────────────────────────────────────────────\n");
 
             if !unsupported_modules.is_empty() {
                 output.push_str(&format!("  Modules: {}\n", unsupported_modules.join(", ")));
@@ -298,7 +326,10 @@ impl ConversionReport {
         output.push_str("───────────────────────────────────────────────────────────────────\n");
 
         if review > 0 {
-            output.push_str(&format!("  1. Review the {} task(s) marked for manual review\n", review));
+            output.push_str(&format!(
+                "  1. Review the {} task(s) marked for manual review\n",
+                review
+            ));
             output.push_str("  2. Run: nexus validate <output-file>\n");
             output.push_str("  3. Run: nexus plan <output-file> --check\n");
             output.push_str("  4. Test in non-production environment first\n");
@@ -320,7 +351,10 @@ impl ConversionReport {
         if let Some(out) = &self.output {
             md.push_str(&format!("**Output:** `{}`\n\n", out.display()));
         }
-        md.push_str(&format!("**Generated:** {}\n\n", self.timestamp.format("%Y-%m-%d %H:%M:%S")));
+        md.push_str(&format!(
+            "**Generated:** {}\n\n",
+            self.timestamp.format("%Y-%m-%d %H:%M:%S")
+        ));
 
         md.push_str("## Summary\n\n");
         md.push_str("| Metric | Count | Percentage |\n");
@@ -333,9 +367,21 @@ impl ConversionReport {
             let review = self.total_need_review();
 
             md.push_str(&format!("| Total Tasks | {} | - |\n", total));
-            md.push_str(&format!("| ✓ Converted | {} | {}% |\n", converted, (converted as f64 / total as f64 * 100.0) as usize));
-            md.push_str(&format!("| ~ Modified | {} | {}% |\n", modified, (modified as f64 / total as f64 * 100.0) as usize));
-            md.push_str(&format!("| ⚠ Needs Review | {} | {}% |\n", review, (review as f64 / total as f64 * 100.0) as usize));
+            md.push_str(&format!(
+                "| ✓ Converted | {} | {}% |\n",
+                converted,
+                (converted as f64 / total as f64 * 100.0) as usize
+            ));
+            md.push_str(&format!(
+                "| ~ Modified | {} | {}% |\n",
+                modified,
+                (modified as f64 / total as f64 * 100.0) as usize
+            ));
+            md.push_str(&format!(
+                "| ⚠ Needs Review | {} | {}% |\n",
+                review,
+                (review as f64 / total as f64 * 100.0) as usize
+            ));
         }
 
         md.push_str("\n## Files Converted\n\n");
@@ -345,8 +391,14 @@ impl ConversionReport {
                 md.push_str(&format!("→ `{}`\n\n", out.display()));
             }
 
-            md.push_str(&format!("- Tasks: {}/{} converted\n", file_result.tasks_converted, file_result.tasks_total));
-            md.push_str(&format!("- Expressions converted: {}\n", file_result.expressions_converted));
+            md.push_str(&format!(
+                "- Tasks: {}/{} converted\n",
+                file_result.tasks_converted, file_result.tasks_total
+            ));
+            md.push_str(&format!(
+                "- Expressions converted: {}\n",
+                file_result.expressions_converted
+            ));
 
             if !file_result.issues.is_empty() {
                 md.push_str("\n**Issues:**\n\n");
@@ -356,7 +408,10 @@ impl ConversionReport {
                         IssueSeverity::Warning => "⚠️",
                         IssueSeverity::Error => "❌",
                     };
-                    let line_info = issue.line.map(|l| format!(" (line {})", l)).unwrap_or_default();
+                    let line_info = issue
+                        .line
+                        .map(|l| format!(" (line {})", l))
+                        .unwrap_or_default();
                     md.push_str(&format!("- {} {}{}\n", icon, issue.message, line_info));
 
                     if let Some(suggestion) = &issue.suggestion {

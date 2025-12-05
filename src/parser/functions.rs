@@ -153,7 +153,11 @@ impl<'a> FunctionParser<'a> {
             }
 
             // Skip leading whitespace
-            while self.peek_char().map(|c| c == ' ' || c == '\t').unwrap_or(false) {
+            while self
+                .peek_char()
+                .map(|c| c == ' ' || c == '\t')
+                .unwrap_or(false)
+            {
                 self.advance();
             }
 
@@ -357,7 +361,11 @@ impl<'a> FunctionParser<'a> {
         self.expect_keyword("return")?;
         self.skip_whitespace();
 
-        let value = if self.peek_char().map(|c| c == '\n' || c == '\r').unwrap_or(true) {
+        let value = if self
+            .peek_char()
+            .map(|c| c == '\n' || c == '\r')
+            .unwrap_or(true)
+        {
             None
         } else {
             Some(self.parse_expression()?)
@@ -608,7 +616,13 @@ impl<'a> FunctionParser<'a> {
 
     fn parse_call_args(
         &mut self,
-    ) -> Result<(Vec<Expression>, std::collections::HashMap<String, Expression>), NexusError> {
+    ) -> Result<
+        (
+            Vec<Expression>,
+            std::collections::HashMap<String, Expression>,
+        ),
+        NexusError,
+    > {
         let mut positional = Vec::new();
         let mut kwargs = std::collections::HashMap::new();
 
@@ -1051,7 +1065,9 @@ impl<'a> FunctionParser<'a> {
         let remaining = &self.source[self.pos..];
         if remaining.starts_with(keyword) {
             let after = remaining.chars().nth(keyword.len());
-            after.map(|c| !c.is_alphanumeric() && c != '_').unwrap_or(true)
+            after
+                .map(|c| !c.is_alphanumeric() && c != '_')
+                .unwrap_or(true)
         } else {
             false
         }
@@ -1092,11 +1108,7 @@ impl<'a> FunctionParser<'a> {
         if self.match_char(c) {
             Ok(())
         } else {
-            Err(self.error(&format!(
-                "Expected '{}', found {:?}",
-                c,
-                self.peek_char()
-            )))
+            Err(self.error(&format!("Expected '{}', found {:?}", c, self.peek_char())))
         }
     }
 

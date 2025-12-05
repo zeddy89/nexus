@@ -1,7 +1,7 @@
+use crate::output::errors::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use crate::output::errors::NexusError;
 
 /// Represents a parsed Ansible playbook
 #[derive(Debug, Clone, Deserialize)]
@@ -73,16 +73,16 @@ pub fn parse_playbook(path: &Path) -> Result<AnsiblePlaybook, NexusError> {
     })?;
 
     // Ansible playbooks are a list of plays
-    let plays: Vec<AnsiblePlay> = serde_yaml::from_str(&content).map_err(|e| NexusError::Parse(
-        Box::new(crate::output::errors::ParseError {
+    let plays: Vec<AnsiblePlay> = serde_yaml::from_str(&content).map_err(|e| {
+        NexusError::Parse(Box::new(crate::output::errors::ParseError {
             kind: crate::output::errors::ParseErrorKind::InvalidYaml,
             message: format!("Failed to parse Ansible playbook: {}", e),
             file: Some(path.display().to_string()),
             line: None,
             column: None,
             suggestion: Some("Ensure the playbook is valid YAML".to_string()),
-        })
-    ))?;
+        }))
+    })?;
 
     Ok(AnsiblePlaybook { plays })
 }

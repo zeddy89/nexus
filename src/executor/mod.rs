@@ -1,7 +1,7 @@
 // Executor module - task execution engine
 
-use async_trait::async_trait;
 use crate::output::errors::NexusError;
+use async_trait::async_trait;
 
 pub mod async_jobs;
 pub mod checkpoint;
@@ -24,8 +24,10 @@ pub use dag::TaskDag;
 pub use facts::{FactCache, FactCategory, FactGatherer, HostFacts};
 pub use handlers::{FlushMode, HandlerConfig, HandlerRegistry};
 pub use local::LocalConnection;
-pub use plan::{ChangeType, ExecutionPlan, HostPlan, PlannedChange, PlanGenerator, SshConfig};
-pub use retry::{calculate_delay, CircuitBreaker, CircuitBreakerRegistry, CircuitState, RetryResult};
+pub use plan::{ChangeType, ExecutionPlan, HostPlan, PlanGenerator, PlannedChange, SshConfig};
+pub use retry::{
+    calculate_delay, CircuitBreaker, CircuitBreakerRegistry, CircuitState, RetryResult,
+};
 pub use scheduler::{Scheduler, SchedulerConfig};
 pub use ssh::{CommandResult, ConnectionPool, ConnectionType, SshConnection};
 pub use tags::TagFilter;

@@ -113,9 +113,9 @@ fn derive_key(password: &str, salt: Option<&[u8]>) -> Result<Zeroizing<Vec<u8>>,
         .map_err(|e| VaultError::KeyDerivationError(e.to_string()))?;
 
     // Extract the hash bytes (32 bytes for AES-256)
-    let hash_str = password_hash.hash.ok_or_else(|| {
-        VaultError::KeyDerivationError("Failed to generate hash".to_string())
-    })?;
+    let hash_str = password_hash
+        .hash
+        .ok_or_else(|| VaultError::KeyDerivationError("Failed to generate hash".to_string()))?;
 
     // Convert hash to bytes
     let mut key = Zeroizing::new(vec![0u8; 32]);
@@ -211,9 +211,7 @@ pub fn prompt_password(prompt: &str) -> Result<String, VaultError> {
     std::io::stderr().flush()?;
 
     let password = rpassword::read_password()
-        .map_err(|e| VaultError::IoError(std::io::Error::other(
-            e.to_string()
-        )))?;
+        .map_err(|e| VaultError::IoError(std::io::Error::other(e.to_string())))?;
 
     eprintln!();
 

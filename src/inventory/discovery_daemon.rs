@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-use std::time::Duration;
-use std::net::IpAddr;
-use std::collections::HashMap;
+use super::discovery::NetworkScanner;
+use crate::output::errors::NexusError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::output::errors::NexusError;
-use super::discovery::NetworkScanner;
+use std::collections::HashMap;
+use std::net::IpAddr;
+use std::path::PathBuf;
+use std::time::Duration;
 
 /// Daemon for continuous network discovery and monitoring
 pub struct DiscoveryDaemon {
@@ -107,18 +107,14 @@ impl DiscoveryDaemon {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.state_file).map_err(|e| {
-            NexusError::Io {
-                message: format!("Failed to read discovery state: {}", e),
-                path: Some(self.state_file.clone()),
-            }
+        let content = std::fs::read_to_string(&self.state_file).map_err(|e| NexusError::Io {
+            message: format!("Failed to read discovery state: {}", e),
+            path: Some(self.state_file.clone()),
         })?;
 
-        self.state = serde_json::from_str(&content).map_err(|e| {
-            NexusError::Inventory {
-                message: format!("Failed to parse discovery state: {}", e),
-                suggestion: Some("State file may be corrupted".to_string()),
-            }
+        self.state = serde_json::from_str(&content).map_err(|e| NexusError::Inventory {
+            message: format!("Failed to parse discovery state: {}", e),
+            suggestion: Some("State file may be corrupted".to_string()),
         })?;
 
         Ok(())
@@ -126,12 +122,11 @@ impl DiscoveryDaemon {
 
     /// Save state to disk
     pub fn save_state(&self) -> Result<(), NexusError> {
-        let json = serde_json::to_string_pretty(&self.state).map_err(|e| {
-            NexusError::Inventory {
+        let json =
+            serde_json::to_string_pretty(&self.state).map_err(|e| NexusError::Inventory {
                 message: format!("Failed to serialize discovery state: {}", e),
                 suggestion: None,
-            }
-        })?;
+            })?;
 
         // Ensure parent directory exists
         if let Some(parent) = self.state_file.parent() {
@@ -193,15 +188,16 @@ impl DiscoveryDaemon {
         }
 
         // Convert to host states
-        let new_hosts: Vec<HostState> = all_discovered.into_iter().map(|h| {
-            HostState {
+        let new_hosts: Vec<HostState> = all_discovered
+            .into_iter()
+            .map(|h| HostState {
                 address: h.address,
                 hostname: h.hostname,
                 open_ports: h.open_ports.iter().map(|p| p.port).collect(),
                 first_seen: h.first_seen,
                 last_seen: h.last_seen,
-            }
-        }).collect();
+            })
+            .collect();
 
         // Compare with previous state to generate events
         let events = self.compare_state(&new_hosts);
@@ -221,10 +217,8 @@ impl DiscoveryDaemon {
         let mut events = Vec::new();
 
         // Convert new hosts to a map for easier lookup
-        let new_map: HashMap<IpAddr, &HostState> = new_hosts
-            .iter()
-            .map(|h| (h.address, h))
-            .collect();
+        let new_map: HashMap<IpAddr, &HostState> =
+            new_hosts.iter().map(|h| (h.address, h)).collect();
 
         // Check for new hosts and port changes
         for new_host in new_hosts {
@@ -302,21 +296,41 @@ impl DiscoveryDaemon {
         let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S");
 
         match event {
-            ChangeEvent::HostDiscovered { address, hostname, open_ports, .. } => {
-                let hostname_str = hostname.as_ref()
+            ChangeEvent::HostDiscovered {
+                address,
+                hostname,
+                open_ports,
+                ..
+            } => {
+                let hostname_str = hostname
+                    .as_ref()
                     .map(|h| format!(" ({})", h))
                     .unwrap_or_default();
-                println!("[{}] Host discovered: {}{} - {} open ports: {:?}",
-                    timestamp, address, hostname_str, open_ports.len(), open_ports);
+                println!(
+                    "[{}] Host discovered: {}{} - {} open ports: {:?}",
+                    timestamp,
+                    address,
+                    hostname_str,
+                    open_ports.len(),
+                    open_ports
+                );
             }
             ChangeEvent::HostDisappeared { address, .. } => {
                 println!("[{}] Host disappeared: {}", timestamp, address);
             }
-            ChangeEvent::PortOpened { host, port, service } => {
-                let service_str = service.as_ref()
+            ChangeEvent::PortOpened {
+                host,
+                port,
+                service,
+            } => {
+                let service_str = service
+                    .as_ref()
                     .map(|s| format!(" ({})", s))
                     .unwrap_or_default();
-                println!("[{}] Port opened on {}: {}{}", timestamp, host, port, service_str);
+                println!(
+                    "[{}] Port opened on {}: {}{}",
+                    timestamp, host, port, service_str
+                );
             }
             ChangeEvent::PortClosed { host, port } => {
                 println!("[{}] Port closed on {}: {}", timestamp, host, port);
@@ -343,10 +357,12 @@ impl DiscoveryDaemon {
                 path: Some(path.clone()),
             })?;
 
-        file.write_all(json.as_bytes()).await.map_err(|e| NexusError::Io {
-            message: format!("Failed to write to notification file: {}", e),
-            path: Some(path.clone()),
-        })?;
+        file.write_all(json.as_bytes())
+            .await
+            .map_err(|e| NexusError::Io {
+                message: format!("Failed to write to notification file: {}", e),
+                path: Some(path.clone()),
+            })?;
 
         file.write_all(b"\n").await.map_err(|e| NexusError::Io {
             message: format!("Failed to write to notification file: {}", e),
@@ -360,16 +376,17 @@ impl DiscoveryDaemon {
     async fn notify_webhook(&self, event: &ChangeEvent, url: &str) -> Result<(), NexusError> {
         let client = reqwest::Client::new();
 
-        let response = client
-            .post(url)
-            .json(event)
-            .send()
-            .await
-            .map_err(|e| NexusError::Runtime {
-                function: Some("webhook".to_string()),
-                message: format!("Failed to send webhook: {}", e),
-                suggestion: Some("Check webhook URL and network connectivity".to_string()),
-            })?;
+        let response =
+            client
+                .post(url)
+                .json(event)
+                .send()
+                .await
+                .map_err(|e| NexusError::Runtime {
+                    function: Some("webhook".to_string()),
+                    message: format!("Failed to send webhook: {}", e),
+                    suggestion: Some("Check webhook URL and network connectivity".to_string()),
+                })?;
 
         if !response.status().is_success() {
             return Err(NexusError::Runtime {
@@ -404,10 +421,8 @@ mod tests {
 
     #[test]
     fn test_daemon_creation() {
-        let daemon = DiscoveryDaemon::new(
-            vec!["192.168.1.0/24".to_string()],
-            Duration::from_secs(60),
-        );
+        let daemon =
+            DiscoveryDaemon::new(vec!["192.168.1.0/24".to_string()], Duration::from_secs(60));
 
         assert_eq!(daemon.watch_subnets.len(), 1);
         assert_eq!(daemon.interval, Duration::from_secs(60));
@@ -417,15 +432,13 @@ mod tests {
     fn test_compare_state_new_host() {
         let daemon = DiscoveryDaemon::new(vec![], Duration::from_secs(60));
 
-        let new_hosts = vec![
-            HostState {
-                address: "192.168.1.10".parse().unwrap(),
-                hostname: Some("host1".to_string()),
-                open_ports: vec![22, 80],
-                first_seen: Utc::now(),
-                last_seen: Utc::now(),
-            },
-        ];
+        let new_hosts = vec![HostState {
+            address: "192.168.1.10".parse().unwrap(),
+            hostname: Some("host1".to_string()),
+            open_ports: vec![22, 80],
+            first_seen: Utc::now(),
+            last_seen: Utc::now(),
+        }];
 
         let events = daemon.compare_state(&new_hosts);
 
@@ -483,23 +496,25 @@ mod tests {
         );
 
         // New state with different ports
-        let new_hosts = vec![
-            HostState {
-                address: "192.168.1.10".parse().unwrap(),
-                hostname: Some("host1".to_string()),
-                open_ports: vec![22, 443], // 80 closed, 443 opened
-                first_seen: Utc::now(),
-                last_seen: Utc::now(),
-            },
-        ];
+        let new_hosts = vec![HostState {
+            address: "192.168.1.10".parse().unwrap(),
+            hostname: Some("host1".to_string()),
+            open_ports: vec![22, 443], // 80 closed, 443 opened
+            first_seen: Utc::now(),
+            last_seen: Utc::now(),
+        }];
 
         let events = daemon.compare_state(&new_hosts);
 
         // Should have port opened and port closed events
         assert_eq!(events.len(), 2);
 
-        let has_port_opened = events.iter().any(|e| matches!(e, ChangeEvent::PortOpened { port: 443, .. }));
-        let has_port_closed = events.iter().any(|e| matches!(e, ChangeEvent::PortClosed { port: 80, .. }));
+        let has_port_opened = events
+            .iter()
+            .any(|e| matches!(e, ChangeEvent::PortOpened { port: 443, .. }));
+        let has_port_closed = events
+            .iter()
+            .any(|e| matches!(e, ChangeEvent::PortClosed { port: 80, .. }));
 
         assert!(has_port_opened, "Expected PortOpened event for port 443");
         assert!(has_port_closed, "Expected PortClosed event for port 80");

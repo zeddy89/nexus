@@ -5,8 +5,8 @@ use std::path::Path;
 
 use super::Module;
 use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
-use crate::output::errors::{NexusError, ModuleError};
 use crate::output::diff::generate_unified_diff;
+use crate::output::errors::{ModuleError, NexusError};
 use crate::parser::ast::FileState;
 
 pub struct FileModule;
@@ -48,7 +48,11 @@ impl FileModule {
                     }
                 }
                 FileState::Directory => format!("create directory {}", path),
-                FileState::Link => format!("create symlink {} -> {}", path, source.as_deref().unwrap_or("?")),
+                FileState::Link => format!(
+                    "create symlink {} -> {}",
+                    path,
+                    source.as_deref().unwrap_or("?")
+                ),
                 FileState::Absent => format!("remove {}", path),
                 FileState::Touch => format!("touch {}", path),
             };
@@ -73,7 +77,10 @@ impl FileModule {
             if state == FileState::File {
                 if let Some(ref content_str) = content {
                     // Check if file exists and content differs
-                    let exists = conn.exec(&format!("test -f {}", shell_quote(path))).await?.success();
+                    let exists = conn
+                        .exec(&format!("test -f {}", shell_quote(path)))
+                        .await?
+                        .success();
                     let old_content = if exists {
                         conn.read_file(path).await.ok()
                     } else {
@@ -112,7 +119,10 @@ impl FileModule {
                     _has_changes = true;
                 } else {
                     // Just ensuring file exists
-                    let exists = conn.exec(&format!("test -f {}", shell_quote(path))).await?.success();
+                    let exists = conn
+                        .exec(&format!("test -f {}", shell_quote(path)))
+                        .await?
+                        .success();
                     _has_changes = !exists;
                 }
             } else {
@@ -135,10 +145,12 @@ impl FileModule {
 
         match state {
             FileState::File => {
-                self.ensure_file(ctx, conn, path, source, content, owner, group, mode).await
+                self.ensure_file(ctx, conn, path, source, content, owner, group, mode)
+                    .await
             }
             FileState::Directory => {
-                self.ensure_directory(ctx, conn, path, owner, group, mode).await
+                self.ensure_directory(ctx, conn, path, owner, group, mode)
+                    .await
             }
             FileState::Link => {
                 if let Some(src) = source {
@@ -154,12 +166,8 @@ impl FileModule {
                     })))
                 }
             }
-            FileState::Absent => {
-                self.ensure_absent(ctx, conn, path).await
-            }
-            FileState::Touch => {
-                self.touch_file(ctx, conn, path, owner, group, mode).await
-            }
+            FileState::Absent => self.ensure_absent(ctx, conn, path).await,
+            FileState::Touch => self.touch_file(ctx, conn, path, owner, group, mode).await,
         }
     }
 
@@ -180,7 +188,10 @@ impl FileModule {
         let mut diff_output: Option<String> = None;
 
         // Check if file exists
-        let exists = conn.exec(&format!("test -f {}", shell_quote(path))).await?.success();
+        let exists = conn
+            .exec(&format!("test -f {}", shell_quote(path)))
+            .await?
+            .success();
 
         // Handle content
         if let Some(content) = content {
@@ -229,8 +240,15 @@ impl FileModule {
                 // If sudo is enabled, use tee to write file (SFTP can't use sudo)
                 if ctx.sudo {
                     // Use base64 encoding to safely transfer content through shell
-                    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, content.as_bytes());
-                    let cmd = format!("echo {} | base64 -d | tee {} > /dev/null", encoded, shell_quote(path));
+                    let encoded = base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        content.as_bytes(),
+                    );
+                    let cmd = format!(
+                        "echo {} | base64 -d | tee {} > /dev/null",
+                        encoded,
+                        shell_quote(path)
+                    );
                     let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
                     if !result.success() {
                         return Err(NexusError::Module(Box::new(ModuleError {
@@ -246,7 +264,11 @@ impl FileModule {
                     conn.write_file(path, &content).await?;
                 }
                 changed = true;
-                output_lines.push(format!("{} file {}", if exists { "Updated" } else { "Created" }, path));
+                output_lines.push(format!(
+                    "{} file {}",
+                    if exists { "Updated" } else { "Created" },
+                    path
+                ));
             }
         } else if let Some(source) = source {
             // Copy from local source
@@ -259,10 +281,11 @@ impl FileModule {
             }
 
             // Check if content differs
-            let local_content = std::fs::read_to_string(local_path).map_err(|e| NexusError::Io {
-                message: format!("Failed to read source file: {}", e),
-                path: Some(local_path.to_path_buf()),
-            })?;
+            let local_content =
+                std::fs::read_to_string(local_path).map_err(|e| NexusError::Io {
+                    message: format!("Failed to read source file: {}", e),
+                    path: Some(local_path.to_path_buf()),
+                })?;
 
             // Read old content for diff generation
             let old_content = if exists && ctx.diff_mode {
@@ -385,7 +408,10 @@ impl FileModule {
         let mut output_lines = Vec::new();
 
         // Check if directory exists
-        let exists = conn.exec(&format!("test -d {}", shell_quote(path))).await?.success();
+        let exists = conn
+            .exec(&format!("test -d {}", shell_quote(path)))
+            .await?
+            .success();
 
         if !exists {
             let cmd = format!("mkdir -p {}", shell_quote(path));
@@ -448,7 +474,9 @@ impl FileModule {
         target: &str,
     ) -> Result<TaskOutput, NexusError> {
         // Check current state
-        let result = conn.exec(&format!("readlink {}", shell_quote(path))).await?;
+        let result = conn
+            .exec(&format!("readlink {}", shell_quote(path)))
+            .await?;
         let current_target = if result.success() {
             Some(result.stdout.trim().to_string())
         } else {
@@ -480,8 +508,7 @@ impl FileModule {
             })));
         }
 
-        Ok(TaskOutput::changed()
-            .with_stdout(format!("Created link {} -> {}", path, target)))
+        Ok(TaskOutput::changed().with_stdout(format!("Created link {} -> {}", path, target)))
     }
 
     async fn ensure_absent(
@@ -491,11 +518,13 @@ impl FileModule {
         path: &str,
     ) -> Result<TaskOutput, NexusError> {
         // Check if exists
-        let exists = conn.exec(&format!("test -e {}", shell_quote(path))).await?.success();
+        let exists = conn
+            .exec(&format!("test -e {}", shell_quote(path)))
+            .await?
+            .success();
 
         if !exists {
-            return Ok(TaskOutput::success()
-                .with_stdout(format!("{} does not exist", path)));
+            return Ok(TaskOutput::success().with_stdout(format!("{} does not exist", path)));
         }
 
         let cmd = format!("rm -rf {}", shell_quote(path));
@@ -511,8 +540,7 @@ impl FileModule {
             })));
         }
 
-        Ok(TaskOutput::changed()
-            .with_stdout(format!("Removed {}", path)))
+        Ok(TaskOutput::changed().with_stdout(format!("Removed {}", path)))
     }
 
     async fn touch_file(
@@ -527,7 +555,10 @@ impl FileModule {
         let mut changed = false;
         let mut output_lines = Vec::new();
 
-        let exists = conn.exec(&format!("test -f {}", shell_quote(path))).await?.success();
+        let exists = conn
+            .exec(&format!("test -f {}", shell_quote(path)))
+            .await?
+            .success();
 
         let cmd = format!("touch {}", shell_quote(path));
         let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
@@ -596,7 +627,9 @@ impl Module for FileModule {
 
 /// Get the mode of a file
 async fn get_file_mode(conn: &dyn Connection, path: &str) -> Result<Option<String>, NexusError> {
-    let result = conn.exec(&format!("stat -c '%a' {} 2>/dev/null", shell_quote(path))).await?;
+    let result = conn
+        .exec(&format!("stat -c '%a' {} 2>/dev/null", shell_quote(path)))
+        .await?;
     if result.success() {
         Ok(Some(result.stdout.trim().to_string()))
     } else {

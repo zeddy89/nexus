@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde_yaml::Value;
+use std::collections::HashMap;
 
 /// Maps Ansible modules to Nexus smart actions
 pub struct ModuleMapper {
@@ -25,174 +25,264 @@ impl ModuleMapper {
         let mut mappings = HashMap::new();
 
         // Package managers → package:
-        mappings.insert("yum", ModuleMapping {
-            nexus_module: "package",
-            nexus_action: None,
-            arg_converter: convert_package_module,
-        });
-        mappings.insert("dnf", ModuleMapping {
-            nexus_module: "package",
-            nexus_action: None,
-            arg_converter: convert_package_module,
-        });
-        mappings.insert("apt", ModuleMapping {
-            nexus_module: "package",
-            nexus_action: None,
-            arg_converter: convert_package_module,
-        });
-        mappings.insert("package", ModuleMapping {
-            nexus_module: "package",
-            nexus_action: None,
-            arg_converter: convert_package_module,
-        });
+        mappings.insert(
+            "yum",
+            ModuleMapping {
+                nexus_module: "package",
+                nexus_action: None,
+                arg_converter: convert_package_module,
+            },
+        );
+        mappings.insert(
+            "dnf",
+            ModuleMapping {
+                nexus_module: "package",
+                nexus_action: None,
+                arg_converter: convert_package_module,
+            },
+        );
+        mappings.insert(
+            "apt",
+            ModuleMapping {
+                nexus_module: "package",
+                nexus_action: None,
+                arg_converter: convert_package_module,
+            },
+        );
+        mappings.insert(
+            "package",
+            ModuleMapping {
+                nexus_module: "package",
+                nexus_action: None,
+                arg_converter: convert_package_module,
+            },
+        );
 
         // Service management
-        mappings.insert("service", ModuleMapping {
-            nexus_module: "service",
-            nexus_action: None,
-            arg_converter: convert_service_module,
-        });
-        mappings.insert("systemd", ModuleMapping {
-            nexus_module: "service",
-            nexus_action: None,
-            arg_converter: convert_service_module,
-        });
+        mappings.insert(
+            "service",
+            ModuleMapping {
+                nexus_module: "service",
+                nexus_action: None,
+                arg_converter: convert_service_module,
+            },
+        );
+        mappings.insert(
+            "systemd",
+            ModuleMapping {
+                nexus_module: "service",
+                nexus_action: None,
+                arg_converter: convert_service_module,
+            },
+        );
 
         // File operations
-        mappings.insert("copy", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("copy"),
-            arg_converter: convert_copy_module,
-        });
-        mappings.insert("template", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("template"),
-            arg_converter: convert_template_module,
-        });
-        mappings.insert("file", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: None,
-            arg_converter: convert_file_module,
-        });
-        mappings.insert("stat", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("stat"),
-            arg_converter: convert_stat_module,
-        });
-        mappings.insert("lineinfile", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("line"),
-            arg_converter: convert_lineinfile_module,
-        });
-        mappings.insert("blockinfile", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("block"),
-            arg_converter: convert_blockinfile_module,
-        });
-        mappings.insert("get_url", ModuleMapping {
-            nexus_module: "file",
-            nexus_action: Some("download"),
-            arg_converter: convert_get_url_module,
-        });
+        mappings.insert(
+            "copy",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("copy"),
+                arg_converter: convert_copy_module,
+            },
+        );
+        mappings.insert(
+            "template",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("template"),
+                arg_converter: convert_template_module,
+            },
+        );
+        mappings.insert(
+            "file",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: None,
+                arg_converter: convert_file_module,
+            },
+        );
+        mappings.insert(
+            "stat",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("stat"),
+                arg_converter: convert_stat_module,
+            },
+        );
+        mappings.insert(
+            "lineinfile",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("line"),
+                arg_converter: convert_lineinfile_module,
+            },
+        );
+        mappings.insert(
+            "blockinfile",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("block"),
+                arg_converter: convert_blockinfile_module,
+            },
+        );
+        mappings.insert(
+            "get_url",
+            ModuleMapping {
+                nexus_module: "file",
+                nexus_action: Some("download"),
+                arg_converter: convert_get_url_module,
+            },
+        );
 
         // User/group management
-        mappings.insert("user", ModuleMapping {
-            nexus_module: "user",
-            nexus_action: None,
-            arg_converter: convert_user_module,
-        });
-        mappings.insert("group", ModuleMapping {
-            nexus_module: "group",
-            nexus_action: None,
-            arg_converter: convert_group_module,
-        });
+        mappings.insert(
+            "user",
+            ModuleMapping {
+                nexus_module: "user",
+                nexus_action: None,
+                arg_converter: convert_user_module,
+            },
+        );
+        mappings.insert(
+            "group",
+            ModuleMapping {
+                nexus_module: "group",
+                nexus_action: None,
+                arg_converter: convert_group_module,
+            },
+        );
 
         // Commands
-        mappings.insert("command", ModuleMapping {
-            nexus_module: "command",
-            nexus_action: None,
-            arg_converter: convert_command_module,
-        });
-        mappings.insert("shell", ModuleMapping {
-            nexus_module: "shell",
-            nexus_action: None,
-            arg_converter: convert_shell_module,
-        });
-        mappings.insert("raw", ModuleMapping {
-            nexus_module: "raw",
-            nexus_action: None,
-            arg_converter: convert_raw_module,
-        });
+        mappings.insert(
+            "command",
+            ModuleMapping {
+                nexus_module: "command",
+                nexus_action: None,
+                arg_converter: convert_command_module,
+            },
+        );
+        mappings.insert(
+            "shell",
+            ModuleMapping {
+                nexus_module: "shell",
+                nexus_action: None,
+                arg_converter: convert_shell_module,
+            },
+        );
+        mappings.insert(
+            "raw",
+            ModuleMapping {
+                nexus_module: "raw",
+                nexus_action: None,
+                arg_converter: convert_raw_module,
+            },
+        );
 
         // Git
-        mappings.insert("git", ModuleMapping {
-            nexus_module: "git",
-            nexus_action: None,
-            arg_converter: convert_git_module,
-        });
+        mappings.insert(
+            "git",
+            ModuleMapping {
+                nexus_module: "git",
+                nexus_action: None,
+                arg_converter: convert_git_module,
+            },
+        );
 
         // HTTP/URI
-        mappings.insert("uri", ModuleMapping {
-            nexus_module: "http",
-            nexus_action: None,
-            arg_converter: convert_uri_module,
-        });
+        mappings.insert(
+            "uri",
+            ModuleMapping {
+                nexus_module: "http",
+                nexus_action: None,
+                arg_converter: convert_uri_module,
+            },
+        );
 
         // Debug/logging
-        mappings.insert("debug", ModuleMapping {
-            nexus_module: "log",
-            nexus_action: None,
-            arg_converter: convert_debug_module,
-        });
-        mappings.insert("fail", ModuleMapping {
-            nexus_module: "fail",
-            nexus_action: None,
-            arg_converter: convert_fail_module,
-        });
-        mappings.insert("assert", ModuleMapping {
-            nexus_module: "assert",
-            nexus_action: None,
-            arg_converter: convert_assert_module,
-        });
+        mappings.insert(
+            "debug",
+            ModuleMapping {
+                nexus_module: "log",
+                nexus_action: None,
+                arg_converter: convert_debug_module,
+            },
+        );
+        mappings.insert(
+            "fail",
+            ModuleMapping {
+                nexus_module: "fail",
+                nexus_action: None,
+                arg_converter: convert_fail_module,
+            },
+        );
+        mappings.insert(
+            "assert",
+            ModuleMapping {
+                nexus_module: "assert",
+                nexus_action: None,
+                arg_converter: convert_assert_module,
+            },
+        );
 
         // Variables
-        mappings.insert("set_fact", ModuleMapping {
-            nexus_module: "set",
-            nexus_action: None,
-            arg_converter: convert_set_fact_module,
-        });
-        mappings.insert("include_vars", ModuleMapping {
-            nexus_module: "vars",
-            nexus_action: None,
-            arg_converter: convert_include_vars_module,
-        });
+        mappings.insert(
+            "set_fact",
+            ModuleMapping {
+                nexus_module: "set",
+                nexus_action: None,
+                arg_converter: convert_set_fact_module,
+            },
+        );
+        mappings.insert(
+            "include_vars",
+            ModuleMapping {
+                nexus_module: "vars",
+                nexus_action: None,
+                arg_converter: convert_include_vars_module,
+            },
+        );
 
         // Include/import
-        mappings.insert("include_tasks", ModuleMapping {
-            nexus_module: "include",
-            nexus_action: None,
-            arg_converter: convert_include_tasks_module,
-        });
-        mappings.insert("import_tasks", ModuleMapping {
-            nexus_module: "import",
-            nexus_action: None,
-            arg_converter: convert_import_tasks_module,
-        });
+        mappings.insert(
+            "include_tasks",
+            ModuleMapping {
+                nexus_module: "include",
+                nexus_action: None,
+                arg_converter: convert_include_tasks_module,
+            },
+        );
+        mappings.insert(
+            "import_tasks",
+            ModuleMapping {
+                nexus_module: "import",
+                nexus_action: None,
+                arg_converter: convert_import_tasks_module,
+            },
+        );
 
         Self { mappings }
     }
 
     /// Convert an Ansible module invocation to Nexus format
-    pub fn convert(&self, module_name: &str, args: &Value) -> Result<ModuleConversionResult, String> {
+    pub fn convert(
+        &self,
+        module_name: &str,
+        args: &Value,
+    ) -> Result<ModuleConversionResult, String> {
         if let Some(mapping) = self.mappings.get(module_name) {
             (mapping.arg_converter)(args)
         } else {
             // Unknown module - flag for manual review
             Ok(ModuleConversionResult {
-                action_line: format!("# TODO: Manual conversion needed for '{}' module", module_name),
-                additional_lines: vec![
-                    format!("# Original: {}: {}", module_name, serde_yaml::to_string(args).unwrap_or_default()),
-                ],
+                action_line: format!(
+                    "# TODO: Manual conversion needed for '{}' module",
+                    module_name
+                ),
+                additional_lines: vec![format!(
+                    "# Original: {}: {}",
+                    module_name,
+                    serde_yaml::to_string(args).unwrap_or_default()
+                )],
                 warnings: vec![format!("Unknown module: {}", module_name)],
             })
         }
@@ -217,7 +307,10 @@ impl Default for ModuleMapper {
 
 // Helper to get string from yaml value
 fn get_str(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn get_bool(value: &Value, key: &str) -> Option<bool> {
@@ -244,7 +337,8 @@ fn get_bool(value: &Value, key: &str) -> Option<bool> {
 fn convert_package_module(args: &Value) -> Result<ModuleConversionResult, String> {
     // Handle update_cache for apt - check if update_cache is present and no name is provided
     if let Some(update_cache) = get_bool(args, "update_cache") {
-        let has_name = get_str(args, "name").is_some() || args.get("name").and_then(|v| v.as_sequence()).is_some();
+        let has_name = get_str(args, "name").is_some()
+            || args.get("name").and_then(|v| v.as_sequence()).is_some();
         if update_cache && !has_name {
             return Ok(ModuleConversionResult {
                 action_line: "package: update".to_string(),
@@ -258,7 +352,8 @@ fn convert_package_module(args: &Value) -> Result<ModuleConversionResult, String
     let name = if let Some(name_str) = get_str(args, "name") {
         name_str
     } else if let Some(name_array) = args.get("name").and_then(|v| v.as_sequence()) {
-        name_array.iter()
+        name_array
+            .iter()
             .filter_map(|v| v.as_str())
             .collect::<Vec<_>>()
             .join(" ")
@@ -334,9 +429,18 @@ fn convert_copy_module(args: &Value) -> Result<ModuleConversionResult, String> {
     }
 
     let action_line = if let Some(src) = src {
-        format!("file: copy {} {} {}", src, dest, options.join(" ")).trim().to_string()
+        format!("file: copy {} {} {}", src, dest, options.join(" "))
+            .trim()
+            .to_string()
     } else if let Some(content) = content {
-        format!("file: write {} --content \"{}\" {}", dest, content.replace("\"", "\\\""), options.join(" ")).trim().to_string()
+        format!(
+            "file: write {} --content \"{}\" {}",
+            dest,
+            content.replace("\"", "\\\""),
+            options.join(" ")
+        )
+        .trim()
+        .to_string()
     } else {
         return Err("copy module requires 'src' or 'content'".to_string());
     };
@@ -360,7 +464,9 @@ fn convert_template_module(args: &Value) -> Result<ModuleConversionResult, Strin
         options.push(format!("--mode {}", mode));
     }
 
-    let action_line = format!("file: template {} {} {}", src, dest, options.join(" ")).trim().to_string();
+    let action_line = format!("file: template {} {} {}", src, dest, options.join(" "))
+        .trim()
+        .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -370,7 +476,9 @@ fn convert_template_module(args: &Value) -> Result<ModuleConversionResult, Strin
 }
 
 fn convert_file_module(args: &Value) -> Result<ModuleConversionResult, String> {
-    let path = get_str(args, "path").or_else(|| get_str(args, "dest")).ok_or("Missing 'path' in file module")?;
+    let path = get_str(args, "path")
+        .or_else(|| get_str(args, "dest"))
+        .ok_or("Missing 'path' in file module")?;
     let state = get_str(args, "state").unwrap_or_else(|| "file".to_string());
 
     let action_line = match state.as_str() {
@@ -382,7 +490,9 @@ fn convert_file_module(args: &Value) -> Result<ModuleConversionResult, String> {
             if let Some(mode) = get_str(args, "mode") {
                 opts.push(format!("--mode {}", mode));
             }
-            format!("file: mkdir {} {}", path, opts.join(" ")).trim().to_string()
+            format!("file: mkdir {} {}", path, opts.join(" "))
+                .trim()
+                .to_string()
         }
         "absent" => format!("file: delete {}", path),
         "link" => {
@@ -401,7 +511,9 @@ fn convert_file_module(args: &Value) -> Result<ModuleConversionResult, String> {
             if opts.is_empty() {
                 format!("file: stat {}", path)
             } else {
-                format!("file: chmod {} {}", path, opts.join(" ")).trim().to_string()
+                format!("file: chmod {} {}", path, opts.join(" "))
+                    .trim()
+                    .to_string()
             }
         }
     };
@@ -424,7 +536,9 @@ fn convert_stat_module(args: &Value) -> Result<ModuleConversionResult, String> {
 }
 
 fn convert_lineinfile_module(args: &Value) -> Result<ModuleConversionResult, String> {
-    let path = get_str(args, "path").or_else(|| get_str(args, "dest")).ok_or("Missing 'path' in lineinfile module")?;
+    let path = get_str(args, "path")
+        .or_else(|| get_str(args, "dest"))
+        .ok_or("Missing 'path' in lineinfile module")?;
     let line = get_str(args, "line");
     let regexp = get_str(args, "regexp");
     let state = get_str(args, "state").unwrap_or_else(|| "present".to_string());
@@ -462,7 +576,14 @@ fn convert_blockinfile_module(args: &Value) -> Result<ModuleConversionResult, St
         opts.push(format!("--marker \"{}\"", marker));
     }
 
-    let action_line = format!("file: block {} \"{}\" {}", path, block.replace("\"", "\\\""), opts.join(" ")).trim().to_string();
+    let action_line = format!(
+        "file: block {} \"{}\" {}",
+        path,
+        block.replace("\"", "\\\""),
+        opts.join(" ")
+    )
+    .trim()
+    .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -483,7 +604,9 @@ fn convert_get_url_module(args: &Value) -> Result<ModuleConversionResult, String
         opts.push(format!("--checksum \"{}\"", checksum));
     }
 
-    let action_line = format!("file: download {} {} {}", url, dest, opts.join(" ")).trim().to_string();
+    let action_line = format!("file: download {} {} {}", url, dest, opts.join(" "))
+        .trim()
+        .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -496,7 +619,11 @@ fn convert_user_module(args: &Value) -> Result<ModuleConversionResult, String> {
     let name = get_str(args, "name").ok_or("Missing 'name' in user module")?;
     let state = get_str(args, "state").unwrap_or_else(|| "present".to_string());
 
-    let action = if state == "absent" { "remove" } else { "create" };
+    let action = if state == "absent" {
+        "remove"
+    } else {
+        "create"
+    };
 
     let mut opts = Vec::new();
     if let Some(groups) = get_str(args, "groups") {
@@ -517,7 +644,9 @@ fn convert_user_module(args: &Value) -> Result<ModuleConversionResult, String> {
         opts.push(format!("--uid {}", uid_str));
     }
 
-    let action_line = format!("user: {} {} {}", action, name, opts.join(" ")).trim().to_string();
+    let action_line = format!("user: {} {} {}", action, name, opts.join(" "))
+        .trim()
+        .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -530,7 +659,11 @@ fn convert_group_module(args: &Value) -> Result<ModuleConversionResult, String> 
     let name = get_str(args, "name").ok_or("Missing 'name' in group module")?;
     let state = get_str(args, "state").unwrap_or_else(|| "present".to_string());
 
-    let action = if state == "absent" { "remove" } else { "create" };
+    let action = if state == "absent" {
+        "remove"
+    } else {
+        "create"
+    };
 
     let action_line = format!("group: {} {}", action, name);
 
@@ -546,7 +679,9 @@ fn convert_command_module(args: &Value) -> Result<ModuleConversionResult, String
     let cmd = if args.is_string() {
         args.as_str().unwrap().to_string()
     } else {
-        get_str(args, "cmd").or_else(|| get_str(args, "_raw_params")).ok_or("Missing command")?
+        get_str(args, "cmd")
+            .or_else(|| get_str(args, "_raw_params"))
+            .ok_or("Missing command")?
     };
 
     let mut opts = Vec::new();
@@ -574,7 +709,9 @@ fn convert_shell_module(args: &Value) -> Result<ModuleConversionResult, String> 
     let cmd = if args.is_string() {
         args.as_str().unwrap().to_string()
     } else {
-        get_str(args, "cmd").or_else(|| get_str(args, "_raw_params")).ok_or("Missing shell command")?
+        get_str(args, "cmd")
+            .or_else(|| get_str(args, "_raw_params"))
+            .ok_or("Missing shell command")?
     };
 
     let action_line = format!("shell: {}", cmd);
@@ -612,7 +749,9 @@ fn convert_git_module(args: &Value) -> Result<ModuleConversionResult, String> {
         opts.push("--force".to_string());
     }
 
-    let action_line = format!("git: clone {} {} {}", repo, dest, opts.join(" ")).trim().to_string();
+    let action_line = format!("git: clone {} {} {}", repo, dest, opts.join(" "))
+        .trim()
+        .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -633,12 +772,17 @@ fn convert_uri_module(args: &Value) -> Result<ModuleConversionResult, String> {
         let code_str = match status_code {
             Value::Number(n) => n.to_string(),
             Value::String(s) => s.clone(),
-            _ => status_code.as_u64().map(|n| n.to_string()).unwrap_or_default(),
+            _ => status_code
+                .as_u64()
+                .map(|n| n.to_string())
+                .unwrap_or_default(),
         };
         opts.push(format!("--expect-status {}", code_str));
     }
 
-    let action_line = format!("http: {} {} {}", method.to_lowercase(), url, opts.join(" ")).trim().to_string();
+    let action_line = format!("http: {} {} {}", method.to_lowercase(), url, opts.join(" "))
+        .trim()
+        .to_string();
 
     Ok(ModuleConversionResult {
         action_line,
@@ -706,15 +850,25 @@ fn convert_set_fact_module(args: &Value) -> Result<ModuleConversionResult, Strin
             if let Some(key_str) = key.as_str() {
                 let value_str = match value {
                     Value::String(s) => s.clone(),
-                    _ => serde_yaml::to_string(value).unwrap_or_default().trim().to_string(),
+                    _ => serde_yaml::to_string(value)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string(),
                 };
                 lines.push(format!("set: {} = {}", key_str, value_str));
             }
         }
     }
 
-    let action_line = lines.first().cloned().unwrap_or_else(|| "set: # TODO: convert".to_string());
-    let additional_lines = if lines.len() > 1 { lines[1..].to_vec() } else { vec![] };
+    let action_line = lines
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "set: # TODO: convert".to_string());
+    let additional_lines = if lines.len() > 1 {
+        lines[1..].to_vec()
+    } else {
+        vec![]
+    };
 
     Ok(ModuleConversionResult {
         action_line,
@@ -727,7 +881,9 @@ fn convert_include_vars_module(args: &Value) -> Result<ModuleConversionResult, S
     let file = if args.is_string() {
         args.as_str().unwrap().to_string()
     } else {
-        get_str(args, "file").or_else(|| get_str(args, "dir")).ok_or("Missing file in include_vars")?
+        get_str(args, "file")
+            .or_else(|| get_str(args, "dir"))
+            .ok_or("Missing file in include_vars")?
     };
 
     Ok(ModuleConversionResult {

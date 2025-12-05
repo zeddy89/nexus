@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
-use std::fs;
-use crate::output::errors::NexusError;
-use super::{Converter, ConversionResult, ConversionIssue, IssueSeverity};
 use super::ansible_parser::AnsibleTask;
 use super::nexus_writer;
+use super::{ConversionIssue, ConversionResult, Converter, IssueSeverity};
+use crate::output::errors::NexusError;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Represents an Ansible role structure
 pub struct AnsibleRole {
@@ -38,28 +38,56 @@ impl AnsibleRole {
         Some(AnsibleRole {
             name,
             path: path.to_path_buf(),
-            tasks_dir: if tasks_dir.exists() { Some(tasks_dir) } else { None },
+            tasks_dir: if tasks_dir.exists() {
+                Some(tasks_dir)
+            } else {
+                None
+            },
             handlers_dir: {
                 let h = path.join("handlers");
-                if h.exists() { Some(h) } else { None }
+                if h.exists() {
+                    Some(h)
+                } else {
+                    None
+                }
             },
             templates_dir: {
                 let t = path.join("templates");
-                if t.exists() { Some(t) } else { None }
+                if t.exists() {
+                    Some(t)
+                } else {
+                    None
+                }
             },
             files_dir: {
                 let f = path.join("files");
-                if f.exists() { Some(f) } else { None }
+                if f.exists() {
+                    Some(f)
+                } else {
+                    None
+                }
             },
             vars_dir: {
                 let v = path.join("vars");
-                if v.exists() { Some(v) } else { None }
+                if v.exists() {
+                    Some(v)
+                } else {
+                    None
+                }
             },
             defaults_dir: {
                 let d = path.join("defaults");
-                if d.exists() { Some(d) } else { None }
+                if d.exists() {
+                    Some(d)
+                } else {
+                    None
+                }
             },
-            meta_file: if meta_file.exists() { Some(meta_file) } else { None },
+            meta_file: if meta_file.exists() {
+                Some(meta_file)
+            } else {
+                None
+            },
         })
     }
 }
@@ -75,7 +103,11 @@ impl<'a> RoleConverter<'a> {
     }
 
     /// Convert an Ansible role to Nexus format
-    pub fn convert_role(&self, role: &AnsibleRole, output_dir: &Path) -> Result<RoleConversionResult, NexusError> {
+    pub fn convert_role(
+        &self,
+        role: &AnsibleRole,
+        output_dir: &Path,
+    ) -> Result<RoleConversionResult, NexusError> {
         let mut result = RoleConversionResult::new(&role.name);
 
         // Create output directory
@@ -126,7 +158,12 @@ impl<'a> RoleConverter<'a> {
         Ok(result)
     }
 
-    fn convert_tasks_dir(&self, tasks_dir: &Path, output_dir: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn convert_tasks_dir(
+        &self,
+        tasks_dir: &Path,
+        output_dir: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         if !self.converter.options.dry_run {
             fs::create_dir_all(output_dir).map_err(|e| NexusError::Io {
                 message: format!("Failed to create tasks directory: {}", e),
@@ -155,7 +192,9 @@ impl<'a> RoleConverter<'a> {
                     }
                     Err(e) => {
                         result.add_issue(ConversionIssue::error(format!(
-                            "Failed to convert {}: {}", path.display(), e
+                            "Failed to convert {}: {}",
+                            path.display(),
+                            e
                         )));
                     }
                 }
@@ -165,7 +204,11 @@ impl<'a> RoleConverter<'a> {
         Ok(())
     }
 
-    fn convert_task_file(&self, source: &Path, output: &Path) -> Result<ConversionResult, NexusError> {
+    fn convert_task_file(
+        &self,
+        source: &Path,
+        output: &Path,
+    ) -> Result<ConversionResult, NexusError> {
         // Read the tasks file (it's a list of tasks, not a full playbook)
         let content = fs::read_to_string(source).map_err(|e| NexusError::Io {
             message: format!("Failed to read {}: {}", source.display(), e),
@@ -176,34 +219,32 @@ impl<'a> RoleConverter<'a> {
         result.output_path = Some(output.to_path_buf());
 
         // Parse as a list of tasks
-        let tasks: Vec<AnsibleTask> = serde_yaml::from_str(&content)
-            .map_err(|e| NexusError::Parse(
-                Box::new(crate::output::errors::ParseError {
-                    kind: crate::output::errors::ParseErrorKind::InvalidYaml,
-                    message: format!("Failed to parse tasks file: {}", e),
-                    file: Some(source.display().to_string()),
-                    line: None,
-                    column: None,
-                    suggestion: Some("Ensure the tasks file is valid YAML".to_string()),
-                })
-            ))?;
+        let tasks: Vec<AnsibleTask> = serde_yaml::from_str(&content).map_err(|e| {
+            NexusError::Parse(Box::new(crate::output::errors::ParseError {
+                kind: crate::output::errors::ParseErrorKind::InvalidYaml,
+                message: format!("Failed to parse tasks file: {}", e),
+                file: Some(source.display().to_string()),
+                line: None,
+                column: None,
+                suggestion: Some("Ensure the tasks file is valid YAML".to_string()),
+            }))
+        })?;
 
         let mut output_content = String::new();
 
         for task in &tasks {
             // For now, just serialize back to YAML with .nx extension
             // In the future, this would call converter.convert_task(task)
-            let task_yaml = serde_yaml::to_string(task)
-                .map_err(|e| NexusError::Parse(
-                    Box::new(crate::output::errors::ParseError {
-                        kind: crate::output::errors::ParseErrorKind::InvalidYaml,
-                        message: format!("Failed to serialize task: {}", e),
-                        file: Some(source.display().to_string()),
-                        line: None,
-                        column: None,
-                        suggestion: None,
-                    })
-                ))?;
+            let task_yaml = serde_yaml::to_string(task).map_err(|e| {
+                NexusError::Parse(Box::new(crate::output::errors::ParseError {
+                    kind: crate::output::errors::ParseErrorKind::InvalidYaml,
+                    message: format!("Failed to serialize task: {}", e),
+                    file: Some(source.display().to_string()),
+                    line: None,
+                    column: None,
+                    suggestion: None,
+                }))
+            })?;
 
             output_content.push_str("- ");
             output_content.push_str(&task_yaml);
@@ -230,7 +271,12 @@ impl<'a> RoleConverter<'a> {
         Ok(result)
     }
 
-    fn convert_handlers_dir(&self, handlers_dir: &Path, role_output: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn convert_handlers_dir(
+        &self,
+        handlers_dir: &Path,
+        role_output: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         let main_handlers = handlers_dir.join("main.yml");
         if main_handlers.exists() {
             let output = role_output.join("handlers.nx.yml");
@@ -241,7 +287,8 @@ impl<'a> RoleConverter<'a> {
                 }
                 Err(e) => {
                     result.add_issue(ConversionIssue::error(format!(
-                        "Failed to convert handlers: {}", e
+                        "Failed to convert handlers: {}",
+                        e
                     )));
                 }
             }
@@ -249,7 +296,12 @@ impl<'a> RoleConverter<'a> {
         Ok(())
     }
 
-    fn copy_templates(&self, templates_dir: &Path, output_dir: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn copy_templates(
+        &self,
+        templates_dir: &Path,
+        output_dir: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         if self.converter.options.dry_run {
             return Ok(());
         }
@@ -265,14 +317,19 @@ impl<'a> RoleConverter<'a> {
         // If converting templates (not keeping Jinja2), convert them
         if self.converter.options.include_templates && !self.converter.options.keep_jinja2 {
             result.add_issue(ConversionIssue::info(
-                "Template conversion enabled but not yet implemented".to_string()
+                "Template conversion enabled but not yet implemented".to_string(),
             ));
         }
 
         Ok(())
     }
 
-    fn copy_files(&self, files_dir: &Path, output_dir: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn copy_files(
+        &self,
+        files_dir: &Path,
+        output_dir: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         if self.converter.options.dry_run {
             return Ok(());
         }
@@ -288,7 +345,13 @@ impl<'a> RoleConverter<'a> {
         Ok(())
     }
 
-    fn merge_vars(&self, defaults_dir: Option<&Path>, vars_dir: Option<&Path>, output: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn merge_vars(
+        &self,
+        defaults_dir: Option<&Path>,
+        vars_dir: Option<&Path>,
+        output: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         let mut merged_vars = serde_yaml::Mapping::new();
 
         // Load defaults first (lower priority)
@@ -331,7 +394,12 @@ impl<'a> RoleConverter<'a> {
         Ok(())
     }
 
-    fn convert_meta(&self, meta_file: &Path, output: &Path, result: &mut RoleConversionResult) -> Result<(), NexusError> {
+    fn convert_meta(
+        &self,
+        meta_file: &Path,
+        output: &Path,
+        result: &mut RoleConversionResult,
+    ) -> Result<(), NexusError> {
         if self.converter.options.dry_run {
             return Ok(());
         }
@@ -385,7 +453,9 @@ impl RoleConversionResult {
     }
 
     pub fn has_errors(&self) -> bool {
-        self.issues.iter().any(|i| matches!(i.severity, IssueSeverity::Error))
+        self.issues
+            .iter()
+            .any(|i| matches!(i.severity, IssueSeverity::Error))
     }
 }
 

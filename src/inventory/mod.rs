@@ -1,18 +1,18 @@
 // Inventory module for host management
 
+mod discovery;
+mod discovery_daemon;
+mod discovery_profile;
 mod dynamic;
 mod groups;
 mod static_inv;
-mod discovery;
-mod discovery_profile;
-mod discovery_daemon;
 
+pub use discovery::*;
+pub use discovery_daemon::*;
+pub use discovery_profile::*;
 pub use dynamic::*;
 pub use groups::*;
 pub use static_inv::*;
-pub use discovery::*;
-pub use discovery_profile::*;
-pub use discovery_daemon::*;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -87,8 +87,12 @@ impl Host {
         }
 
         // Check if hostname is localhost or 127.0.0.1
-        self.name == "localhost" || self.name == "127.0.0.1" || self.name == "::1" ||
-        self.address == "localhost" || self.address == "127.0.0.1" || self.address == "::1"
+        self.name == "localhost"
+            || self.name == "127.0.0.1"
+            || self.name == "::1"
+            || self.address == "localhost"
+            || self.address == "127.0.0.1"
+            || self.address == "::1"
     }
 
     /// Create a localhost host for delegation
@@ -276,8 +280,6 @@ impl std::str::FromStr for Inventory {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_inventory(s)
     }
-
-
 }
 
 impl Inventory {
@@ -332,7 +334,10 @@ impl Inventory {
                     vec![host]
                 } else {
                     // Check for 127.0.0.1 as well
-                    self.hosts.get("127.0.0.1").map(|h| vec![h]).unwrap_or_default()
+                    self.hosts
+                        .get("127.0.0.1")
+                        .map(|h| vec![h])
+                        .unwrap_or_default()
                 }
             }
             HostPattern::Inline(_) => {

@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::output::errors::NexusError;
+use std::path::Path;
 
 /// Write converted content to a Nexus playbook file
 pub fn write_nexus_playbook(path: &Path, content: &str) -> Result<(), NexusError> {

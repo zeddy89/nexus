@@ -32,14 +32,28 @@ impl AsyncStatusModule {
                 output.changed = false;
                 output.skipped = false;
                 output.stdout = format!("Job {} is still running (PID: {})", job_id, pid);
-                output.data.insert("job_id".to_string(), Value::String(job_id.to_string()));
-                output.data.insert("status".to_string(), Value::String("running".to_string()));
-                output.data.insert("pid".to_string(), Value::Int(pid as i64));
-                output.data.insert("started_at".to_string(), Value::String(started_at));
-                output.data.insert("finished".to_string(), Value::Bool(false));
+                output
+                    .data
+                    .insert("job_id".to_string(), Value::String(job_id.to_string()));
+                output
+                    .data
+                    .insert("status".to_string(), Value::String("running".to_string()));
+                output
+                    .data
+                    .insert("pid".to_string(), Value::Int(pid as i64));
+                output
+                    .data
+                    .insert("started_at".to_string(), Value::String(started_at));
+                output
+                    .data
+                    .insert("finished".to_string(), Value::Bool(false));
                 Ok(output)
             }
-            crate::executor::JobStatus::Finished { exit_code, stdout, stderr } => {
+            crate::executor::JobStatus::Finished {
+                exit_code,
+                stdout,
+                stderr,
+            } => {
                 let mut output = if exit_code == 0 {
                     TaskOutput::changed()
                 } else {
@@ -48,30 +62,34 @@ impl AsyncStatusModule {
                 output.stdout = stdout;
                 output.stderr = stderr;
                 output.exit_code = exit_code;
-                output.data.insert("job_id".to_string(), Value::String(job_id.to_string()));
-                output.data.insert("status".to_string(), Value::String("finished".to_string()));
-                output.data.insert("finished".to_string(), Value::Bool(true));
-                output.data.insert("rc".to_string(), Value::Int(exit_code as i64));
+                output
+                    .data
+                    .insert("job_id".to_string(), Value::String(job_id.to_string()));
+                output
+                    .data
+                    .insert("status".to_string(), Value::String("finished".to_string()));
+                output
+                    .data
+                    .insert("finished".to_string(), Value::Bool(true));
+                output
+                    .data
+                    .insert("rc".to_string(), Value::Int(exit_code as i64));
                 Ok(output)
             }
-            crate::executor::JobStatus::Failed { error } => {
-                Ok(TaskOutput::failed(error)
-                    .with_data("job_id", Value::String(job_id.to_string()))
-                    .with_data("status", Value::String("failed".to_string()))
-                    .with_data("finished", Value::Bool(true)))
-            }
-            crate::executor::JobStatus::TimedOut => {
-                Ok(TaskOutput::failed("Job timed out")
-                    .with_data("job_id", Value::String(job_id.to_string()))
-                    .with_data("status", Value::String("timeout".to_string()))
-                    .with_data("finished", Value::Bool(true)))
-            }
-            crate::executor::JobStatus::NotFound => {
-                Ok(TaskOutput::failed("Job not found - may have been cleaned up")
-                    .with_data("job_id", Value::String(job_id.to_string()))
-                    .with_data("status", Value::String("not_found".to_string()))
-                    .with_data("finished", Value::Bool(true)))
-            }
+            crate::executor::JobStatus::Failed { error } => Ok(TaskOutput::failed(error)
+                .with_data("job_id", Value::String(job_id.to_string()))
+                .with_data("status", Value::String("failed".to_string()))
+                .with_data("finished", Value::Bool(true))),
+            crate::executor::JobStatus::TimedOut => Ok(TaskOutput::failed("Job timed out")
+                .with_data("job_id", Value::String(job_id.to_string()))
+                .with_data("status", Value::String("timeout".to_string()))
+                .with_data("finished", Value::Bool(true))),
+            crate::executor::JobStatus::NotFound => Ok(TaskOutput::failed(
+                "Job not found - may have been cleaned up",
+            )
+            .with_data("job_id", Value::String(job_id.to_string()))
+            .with_data("status", Value::String("not_found".to_string()))
+            .with_data("finished", Value::Bool(true))),
         }
     }
 }

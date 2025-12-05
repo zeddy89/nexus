@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use super::Module;
 use crate::executor::{Connection, ExecutionContext, SshConnection, TaskOutput};
-use crate::output::errors::{NexusError, ModuleError};
+use crate::output::errors::{ModuleError, NexusError};
 use crate::parser::ast::ServiceState;
 
 pub struct ServiceModule;
@@ -56,7 +56,9 @@ impl ServiceModule {
                             host: conn.host_name().to_string(),
                             message: format!("Failed to start service {}", name),
                             stderr: Some(result.stderr),
-                            suggestion: Some("Check service logs with: journalctl -u ".to_string() + name),
+                            suggestion: Some(
+                                "Check service logs with: journalctl -u ".to_string() + name,
+                            ),
                         })));
                     }
                     changed = true;
@@ -194,19 +196,23 @@ struct ServiceStateInfo {
 }
 
 /// Get the current state of a service
-async fn get_service_state(conn: &dyn Connection, name: &str) -> Result<ServiceStateInfo, NexusError> {
+async fn get_service_state(
+    conn: &dyn Connection,
+    name: &str,
+) -> Result<ServiceStateInfo, NexusError> {
     // Check if running
-    let active_result = conn.exec(&format!(
-        "systemctl is-active {} 2>/dev/null || true",
-        name
-    )).await?;
+    let active_result = conn
+        .exec(&format!("systemctl is-active {} 2>/dev/null || true", name))
+        .await?;
     let running = active_result.stdout.trim() == "active";
 
     // Check if enabled
-    let enabled_result = conn.exec(&format!(
-        "systemctl is-enabled {} 2>/dev/null || true",
-        name
-    )).await?;
+    let enabled_result = conn
+        .exec(&format!(
+            "systemctl is-enabled {} 2>/dev/null || true",
+            name
+        ))
+        .await?;
     let enabled = enabled_result.stdout.trim() == "enabled";
 
     Ok(ServiceStateInfo { running, enabled })

@@ -1,9 +1,9 @@
+use crate::output::errors::NexusError;
+use chrono::{DateTime, Utc};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
-use chrono::{DateTime, Utc};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use crate::output::errors::NexusError;
 
 /// Network scanner for discovering hosts on a network
 pub struct NetworkScanner {
@@ -37,9 +37,9 @@ pub struct OpenPort {
 /// OS classification information
 #[derive(Debug, Clone)]
 pub struct OsClassification {
-    pub os_family: String,          // linux, windows, bsd
-    pub distribution: Option<String>,  // ubuntu, rhel, debian
-    pub confidence: f32,            // 0.0 - 1.0
+    pub os_family: String,            // linux, windows, bsd
+    pub distribution: Option<String>, // ubuntu, rhel, debian
+    pub confidence: f32,              // 0.0 - 1.0
 }
 
 /// Fingerprint information gathered from the host
@@ -111,7 +111,9 @@ impl NetworkScanner {
 
             tasks.push(tokio::spawn(async move {
                 let _permit = sem_clone.acquire().await.unwrap();
-                let host = Self::probe_host_internal(ip, &ports_clone, timeout_duration, fingerprint).await;
+                let host =
+                    Self::probe_host_internal(ip, &ports_clone, timeout_duration, fingerprint)
+                        .await;
 
                 // For SSH probe type, only return hosts with port 22 open
                 if require_ssh {
@@ -149,10 +151,9 @@ impl NetworkScanner {
 
         // Probe each port
         for &port in ports {
-            if let Ok(Ok(_stream)) = timeout(
-                timeout_duration,
-                TcpStream::connect((addr, port))
-            ).await {
+            if let Ok(Ok(_stream)) =
+                timeout(timeout_duration, TcpStream::connect((addr, port))).await
+            {
                 let mut open_port = OpenPort {
                     port,
                     service: identify_service(port),
@@ -201,7 +202,11 @@ impl NetworkScanner {
     }
 
     /// Grab SSH banner from a host
-    async fn grab_ssh_banner(addr: IpAddr, port: u16, timeout_duration: Duration) -> Option<String> {
+    async fn grab_ssh_banner(
+        addr: IpAddr,
+        port: u16,
+        timeout_duration: Duration,
+    ) -> Option<String> {
         use tokio::io::AsyncReadExt;
 
         match timeout(timeout_duration, TcpStream::connect((addr, port))).await {
@@ -228,8 +233,8 @@ impl NetworkScanner {
 
         Fingerprint {
             ssh_banner,
-            tcp_timestamps: None,  // Would require raw socket access
-            ttl: None,             // Would require raw socket access
+            tcp_timestamps: None, // Would require raw socket access
+            ttl: None,            // Would require raw socket access
         }
     }
 

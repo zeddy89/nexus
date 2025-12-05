@@ -1,26 +1,26 @@
+mod ansible_parser;
 mod expression;
 mod module_mapper;
-mod report;
-mod ansible_parser;
 mod nexus_writer;
+mod report;
 mod role_converter;
 
 pub use expression::ExpressionConverter;
-pub use module_mapper::{ModuleMapper, ModuleMapping, ModuleConversionResult};
-pub use report::{ConversionReport, ConversionResult, ConversionIssue, IssueSeverity};
-pub use role_converter::{RoleConverter, AnsibleRole, RoleConversionResult};
+pub use module_mapper::{ModuleConversionResult, ModuleMapper, ModuleMapping};
+pub use report::{ConversionIssue, ConversionReport, ConversionResult, IssueSeverity};
+pub use role_converter::{AnsibleRole, RoleConversionResult, RoleConverter};
 
-use std::path::{Path, PathBuf};
-use std::fs;
 use crate::output::errors::NexusError;
-use ansible_parser::{AnsiblePlaybook, AnsiblePlay, AnsibleTask, parse_playbook};
+use ansible_parser::{parse_playbook, AnsiblePlay, AnsiblePlaybook, AnsibleTask};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Type alias for play conversion result: (output, (total, converted, review), issues)
-type PlayConversionResult = Result<(String, (usize, usize, usize), Vec<ConversionIssue>), NexusError>;
+type PlayConversionResult =
+    Result<(String, (usize, usize, usize), Vec<ConversionIssue>), NexusError>;
 
 /// Options for conversion
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ConversionOptions {
     pub dry_run: bool,
     pub interactive: bool,
@@ -50,7 +50,11 @@ impl Converter {
     }
 
     /// Convert a single file or directory
-    pub fn convert(&self, source: &Path, output: Option<&Path>) -> Result<ConversionReport, NexusError> {
+    pub fn convert(
+        &self,
+        source: &Path,
+        output: Option<&Path>,
+    ) -> Result<ConversionReport, NexusError> {
         if source.is_dir() {
             self.convert_directory(source, output)
         } else {
@@ -66,7 +70,11 @@ impl Converter {
         Ok(report)
     }
 
-    fn convert_file(&self, source: &Path, output: Option<&Path>) -> Result<ConversionReport, NexusError> {
+    fn convert_file(
+        &self,
+        source: &Path,
+        output: Option<&Path>,
+    ) -> Result<ConversionReport, NexusError> {
         let mut report = ConversionReport::new(source.to_path_buf());
 
         // Parse the Ansible playbook
@@ -96,7 +104,11 @@ impl Converter {
         Ok(report)
     }
 
-    fn convert_directory(&self, source: &Path, output: Option<&Path>) -> Result<ConversionReport, NexusError> {
+    fn convert_directory(
+        &self,
+        source: &Path,
+        output: Option<&Path>,
+    ) -> Result<ConversionReport, NexusError> {
         let mut report = ConversionReport::new(source.to_path_buf());
 
         if let Some(out) = output {
@@ -108,7 +120,8 @@ impl Converter {
 
         if !roles.is_empty() {
             // If we found roles, convert them
-            let role_output_dir = output.map(|o| o.join("nexus-roles"))
+            let role_output_dir = output
+                .map(|o| o.join("nexus-roles"))
                 .unwrap_or_else(|| source.join("nexus-roles"));
 
             let role_converter = role_converter::RoleConverter::new(self);
@@ -135,7 +148,8 @@ impl Converter {
                         let mut result = ConversionResult::new(role.path.clone());
                         result.success = false;
                         result.add_issue(ConversionIssue::error(format!(
-                            "Failed to convert role '{}': {}", role.name, e
+                            "Failed to convert role '{}': {}",
+                            role.name, e
                         )));
                         report.add_file_result(result);
                     }
@@ -184,7 +198,11 @@ impl Converter {
         Ok(report)
     }
 
-    fn convert_single_file(&self, source: &Path, output: Option<&Path>) -> Result<ConversionResult, NexusError> {
+    fn convert_single_file(
+        &self,
+        source: &Path,
+        output: Option<&Path>,
+    ) -> Result<ConversionResult, NexusError> {
         let playbook = parse_playbook(source)?;
         let (converted_content, mut file_result) = self.convert_playbook(&playbook, source)?;
 
@@ -210,7 +228,11 @@ impl Converter {
         Ok(file_result)
     }
 
-    fn convert_playbook(&self, playbook: &AnsiblePlaybook, source: &Path) -> Result<(String, ConversionResult), NexusError> {
+    fn convert_playbook(
+        &self,
+        playbook: &AnsiblePlaybook,
+        source: &Path,
+    ) -> Result<(String, ConversionResult), NexusError> {
         let mut result = ConversionResult::new(source.to_path_buf());
         let mut output = String::new();
 
@@ -285,7 +307,10 @@ impl Converter {
         Ok((output, (total_tasks, converted_tasks, review_tasks), issues))
     }
 
-    fn convert_task(&self, task: &AnsibleTask) -> Result<(String, Vec<ConversionIssue>, bool), NexusError> {
+    fn convert_task(
+        &self,
+        task: &AnsibleTask,
+    ) -> Result<(String, Vec<ConversionIssue>, bool), NexusError> {
         let mut output = String::new();
         let mut issues = Vec::new();
         let mut needs_review = false;
@@ -302,11 +327,33 @@ impl Converter {
 
         // Common modules we should check for
         let known_modules = [
-            "yum", "dnf", "apt", "package", "service", "systemd",
-            "copy", "template", "file", "stat", "lineinfile", "blockinfile",
-            "user", "group", "command", "shell", "raw", "git",
-            "get_url", "uri", "debug", "fail", "assert", "set_fact",
-            "include_vars", "include_tasks", "import_tasks",
+            "yum",
+            "dnf",
+            "apt",
+            "package",
+            "service",
+            "systemd",
+            "copy",
+            "template",
+            "file",
+            "stat",
+            "lineinfile",
+            "blockinfile",
+            "user",
+            "group",
+            "command",
+            "shell",
+            "raw",
+            "git",
+            "get_url",
+            "uri",
+            "debug",
+            "fail",
+            "assert",
+            "set_fact",
+            "include_vars",
+            "include_tasks",
+            "import_tasks",
         ];
 
         for module in &known_modules {
@@ -345,7 +392,10 @@ impl Converter {
             if !unknown_modules.is_empty() {
                 let first_module = unknown_modules[0];
                 output.push_str(&format!("# TODO: Unknown module '{}'\n", first_module));
-                issues.push(ConversionIssue::warning(format!("Unknown module: {}", first_module)));
+                issues.push(ConversionIssue::warning(format!(
+                    "Unknown module: {}",
+                    first_module
+                )));
                 needs_review = true;
             }
         }
@@ -369,12 +419,11 @@ impl Converter {
         if let Some(notify) = &task.notify {
             let notify_str = match notify {
                 serde_yaml::Value::String(s) => s.clone(),
-                serde_yaml::Value::Sequence(seq) => {
-                    seq.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                }
+                serde_yaml::Value::Sequence(seq) => seq
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 _ => String::new(),
             };
             if !notify_str.is_empty() {
@@ -389,7 +438,10 @@ impl Converter {
                     let converted = self.expression_converter.convert_string(s);
                     converted.output
                 }
-                other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                other => serde_yaml::to_string(other)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
             };
             output.push_str(&format!("    loop: {}\n", loop_str));
         } else if let Some(with_items) = &task.with_items {
@@ -398,7 +450,10 @@ impl Converter {
                     let converted = self.expression_converter.convert_string(s);
                     converted.output
                 }
-                other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                other => serde_yaml::to_string(other)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
             };
             output.push_str(&format!("    loop: {}\n", items_str));
         }
@@ -407,12 +462,11 @@ impl Converter {
         if let Some(tags) = &task.tags {
             let tags_str = match tags {
                 serde_yaml::Value::String(s) => s.clone(),
-                serde_yaml::Value::Sequence(seq) => {
-                    seq.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                }
+                serde_yaml::Value::Sequence(seq) => seq
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 _ => String::new(),
             };
             if !tags_str.is_empty() {
@@ -548,12 +602,13 @@ fn find_ansible_roles(dir: &Path) -> Result<Vec<role_converter::AnsibleRole>, Ne
             let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
 
             // Skip hidden and common non-role directories
-            if dir_name.starts_with('.') ||
-               dir_name == "group_vars" ||
-               dir_name == "host_vars" ||
-               dir_name == "inventory" ||
-               dir_name == "playbooks" ||
-               dir_name == "nexus-roles" {
+            if dir_name.starts_with('.')
+                || dir_name == "group_vars"
+                || dir_name == "host_vars"
+                || dir_name == "inventory"
+                || dir_name == "playbooks"
+                || dir_name == "nexus-roles"
+            {
                 continue;
             }
 

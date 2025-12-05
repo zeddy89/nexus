@@ -21,7 +21,7 @@ pub use user::UserModule;
 use async_trait::async_trait;
 
 use crate::executor::{Connection, ExecutionContext, LocalConnection, SshConnection, TaskOutput};
-use crate::output::errors::{NexusError, ModuleError};
+use crate::output::errors::{ModuleError, NexusError};
 use crate::parser::ast::ModuleCall;
 use crate::runtime::evaluate_expression;
 
@@ -87,100 +87,179 @@ impl ModuleExecutor {
         match module_call {
             ModuleCall::Package { name, state } => {
                 let name_val = evaluate_expression(name, ctx)?;
-                self.package.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &name_val.to_string(),
-                    *state,
-                ).await
+                self.package
+                    .execute_with_params(ctx, conn.as_connection(), &name_val.to_string(), *state)
+                    .await
             }
 
-            ModuleCall::Service { name, state, enabled } => {
+            ModuleCall::Service {
+                name,
+                state,
+                enabled,
+            } => {
                 let name_val = evaluate_expression(name, ctx)?;
-                self.service.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &name_val.to_string(),
-                    *state,
-                    *enabled,
-                ).await
+                self.service
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &name_val.to_string(),
+                        *state,
+                        *enabled,
+                    )
+                    .await
             }
 
-            ModuleCall::File { path, state, source, content, owner, group, mode } => {
+            ModuleCall::File {
+                path,
+                state,
+                source,
+                content,
+                owner,
+                group,
+                mode,
+            } => {
                 let path_val = evaluate_expression(path, ctx)?;
-                let source_val = source.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let content_val = content.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let owner_val = owner.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let group_val = group.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let mode_val = mode.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let source_val = source
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let content_val = content
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let owner_val = owner
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let group_val = group
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let mode_val = mode
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
 
-                self.file.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &path_val.to_string(),
-                    *state,
-                    source_val.as_ref().map(|v| v.to_string()),
-                    content_val.as_ref().map(|v| v.to_string()),
-                    owner_val.as_ref().map(|v| v.to_string()),
-                    group_val.as_ref().map(|v| v.to_string()),
-                    mode_val.as_ref().map(|v| v.to_string()),
-                ).await
+                self.file
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &path_val.to_string(),
+                        *state,
+                        source_val.as_ref().map(|v| v.to_string()),
+                        content_val.as_ref().map(|v| v.to_string()),
+                        owner_val.as_ref().map(|v| v.to_string()),
+                        group_val.as_ref().map(|v| v.to_string()),
+                        mode_val.as_ref().map(|v| v.to_string()),
+                    )
+                    .await
             }
 
-            ModuleCall::Command { cmd, creates, removes } => {
+            ModuleCall::Command {
+                cmd,
+                creates,
+                removes,
+            } => {
                 let cmd_val = evaluate_expression(cmd, ctx)?;
-                let creates_val = creates.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let removes_val = removes.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let creates_val = creates
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let removes_val = removes
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
 
-                self.command.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &cmd_val.to_string(),
-                    creates_val.as_ref().map(|v| v.to_string()),
-                    removes_val.as_ref().map(|v| v.to_string()),
-                ).await
+                self.command
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &cmd_val.to_string(),
+                        creates_val.as_ref().map(|v| v.to_string()),
+                        removes_val.as_ref().map(|v| v.to_string()),
+                    )
+                    .await
             }
 
-            ModuleCall::Shell { command, chdir, creates, removes } => {
+            ModuleCall::Shell {
+                command,
+                chdir,
+                creates,
+                removes,
+            } => {
                 let cmd_val = evaluate_expression(command, ctx)?;
-                let chdir_val = chdir.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let creates_val = creates.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let removes_val = removes.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let chdir_val = chdir
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let creates_val = creates
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let removes_val = removes
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
 
-                self.shell.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &cmd_val.to_string(),
-                    chdir_val.as_ref().map(|v| v.to_string()),
-                    creates_val.as_ref().map(|v| v.to_string()),
-                    removes_val.as_ref().map(|v| v.to_string()),
-                ).await
+                self.shell
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &cmd_val.to_string(),
+                        chdir_val.as_ref().map(|v| v.to_string()),
+                        creates_val.as_ref().map(|v| v.to_string()),
+                        removes_val.as_ref().map(|v| v.to_string()),
+                    )
+                    .await
             }
 
-            ModuleCall::User { name, state, uid, gid, groups, shell, home, create_home } => {
+            ModuleCall::User {
+                name,
+                state,
+                uid,
+                gid,
+                groups,
+                shell,
+                home,
+                create_home,
+            } => {
                 let name_val = evaluate_expression(name, ctx)?;
-                let uid_val = uid.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let gid_val = gid.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let shell_val = shell.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let home_val = home.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let uid_val = uid
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let gid_val = gid
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let shell_val = shell
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let home_val = home
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
 
                 let groups_val: Result<Vec<_>, _> = groups
                     .iter()
                     .map(|e| evaluate_expression(e, ctx).map(|v| v.to_string()))
                     .collect();
 
-                self.user.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &name_val.to_string(),
-                    *state,
-                    uid_val.as_ref().and_then(|v| v.as_i64()).map(|i| i as u32),
-                    gid_val.as_ref().and_then(|v| v.as_i64()).map(|i| i as u32),
-                    groups_val?,
-                    shell_val.as_ref().map(|v| v.to_string()),
-                    home_val.as_ref().map(|v| v.to_string()),
-                    *create_home,
-                ).await
+                self.user
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &name_val.to_string(),
+                        *state,
+                        uid_val.as_ref().and_then(|v| v.as_i64()).map(|i| i as u32),
+                        gid_val.as_ref().and_then(|v| v.as_i64()).map(|i| i as u32),
+                        groups_val?,
+                        shell_val.as_ref().map(|v| v.to_string()),
+                        home_val.as_ref().map(|v| v.to_string()),
+                        *create_home,
+                    )
+                    .await
             }
 
             ModuleCall::RunFunction { name, args: _ } => {
@@ -192,12 +271,27 @@ impl ModuleExecutor {
                 })
             }
 
-            ModuleCall::Template { src, dest, owner, group, mode } => {
+            ModuleCall::Template {
+                src,
+                dest,
+                owner,
+                group,
+                mode,
+            } => {
                 let src_val = evaluate_expression(src, ctx)?;
                 let dest_val = evaluate_expression(dest, ctx)?;
-                let owner_val = owner.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let group_val = group.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
-                let mode_val = mode.as_ref().map(|e| evaluate_expression(e, ctx)).transpose()?;
+                let owner_val = owner
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let group_val = group
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+                let mode_val = mode
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
 
                 // Check mode - skip template rendering and just report intent
                 if ctx.check_mode {
@@ -237,17 +331,19 @@ impl ModuleExecutor {
                 let rendered = engine.render_file(src_path, ctx)?;
 
                 // Write the rendered content to the destination
-                self.file.execute_with_params(
-                    ctx,
-                    conn.as_connection(),
-                    &dest_val.to_string(),
-                    crate::parser::ast::FileState::File,
-                    None, // Don't use source, we have content
-                    Some(rendered),
-                    owner_val.as_ref().map(|v| v.to_string()),
-                    group_val.as_ref().map(|v| v.to_string()),
-                    mode_val.as_ref().map(|v| v.to_string()),
-                ).await
+                self.file
+                    .execute_with_params(
+                        ctx,
+                        conn.as_connection(),
+                        &dest_val.to_string(),
+                        crate::parser::ast::FileState::File,
+                        None, // Don't use source, we have content
+                        Some(rendered),
+                        owner_val.as_ref().map(|v| v.to_string()),
+                        group_val.as_ref().map(|v| v.to_string()),
+                        mode_val.as_ref().map(|v| v.to_string()),
+                    )
+                    .await
             }
 
             ModuleCall::Facts { categories } => {
@@ -285,12 +381,15 @@ impl ModuleExecutor {
 
                 // Gather facts - currently only supported for SSH connections
                 let facts = match conn {
-                    AnyConnection::Ssh(ssh_conn) => FactGatherer::gather(ssh_conn, &cats_to_gather)?,
+                    AnyConnection::Ssh(ssh_conn) => {
+                        FactGatherer::gather(ssh_conn, &cats_to_gather)?
+                    }
                     AnyConnection::Local(_) => {
                         // TODO: Implement local fact gathering
                         return Err(NexusError::Runtime {
                             function: Some("facts".to_string()),
-                            message: "Fact gathering not yet implemented for local connections".to_string(),
+                            message: "Fact gathering not yet implemented for local connections"
+                                .to_string(),
                             suggestion: Some("Use SSH connection for fact gathering".to_string()),
                         });
                     }
@@ -324,8 +423,8 @@ impl ModuleExecutor {
 
                 // Create output
                 let fact_count = facts.len();
-                let mut output = TaskOutput::success()
-                    .with_stdout(format!("Gathered {} facts", fact_count));
+                let mut output =
+                    TaskOutput::success().with_stdout(format!("Gathered {} facts", fact_count));
 
                 // Store the facts in the output data
                 output.data = facts;
@@ -387,7 +486,10 @@ impl PackageManager {
         match self {
             PackageManager::Dnf => format!("dnf install -y {}", package),
             PackageManager::Yum => format!("yum install -y {}", package),
-            PackageManager::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get install -y {}", package),
+            PackageManager::Apt => format!(
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y {}",
+                package
+            ),
             PackageManager::Zypper => format!("zypper install -y {}", package),
             PackageManager::Pacman => format!("pacman -S --noconfirm {}", package),
             PackageManager::Apk => format!("apk add {}", package),
@@ -398,7 +500,10 @@ impl PackageManager {
         match self {
             PackageManager::Dnf => format!("dnf remove -y {}", package),
             PackageManager::Yum => format!("yum remove -y {}", package),
-            PackageManager::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get remove -y {}", package),
+            PackageManager::Apt => format!(
+                "DEBIAN_FRONTEND=noninteractive apt-get remove -y {}",
+                package
+            ),
             PackageManager::Zypper => format!("zypper remove -y {}", package),
             PackageManager::Pacman => format!("pacman -R --noconfirm {}", package),
             PackageManager::Apk => format!("apk del {}", package),
@@ -409,7 +514,10 @@ impl PackageManager {
         match self {
             PackageManager::Dnf => format!("dnf upgrade -y {}", package),
             PackageManager::Yum => format!("yum update -y {}", package),
-            PackageManager::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get upgrade -y {}", package),
+            PackageManager::Apt => format!(
+                "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y {}",
+                package
+            ),
             PackageManager::Zypper => format!("zypper update -y {}", package),
             PackageManager::Pacman => format!("pacman -Syu --noconfirm {}", package),
             PackageManager::Apk => format!("apk upgrade {}", package),
