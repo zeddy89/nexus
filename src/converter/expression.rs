@@ -194,12 +194,13 @@ impl ExpressionConverter {
         let unsupported = Vec::new();
 
         // Handle "is defined" / "is not defined"
-        let defined_re = Regex::new(r"(\w+)\s+is\s+defined").unwrap();
+        // Match variable paths like: my_var, result.stdout, foo.bar.baz
+        let defined_re = Regex::new(r"([\w.]+)\s+is\s+defined").unwrap();
         output = defined_re
             .replace_all(&output, "$${$1 != null}")
             .to_string();
 
-        let not_defined_re = Regex::new(r"(\w+)\s+is\s+not\s+defined").unwrap();
+        let not_defined_re = Regex::new(r"([\w.]+)\s+is\s+not\s+defined").unwrap();
         output = not_defined_re
             .replace_all(&output, "$${$1 == null}")
             .to_string();

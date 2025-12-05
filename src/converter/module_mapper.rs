@@ -335,6 +335,15 @@ fn get_bool(value: &Value, key: &str) -> Option<bool> {
 // === Module converters ===
 
 fn convert_package_module(args: &Value) -> Result<ModuleConversionResult, String> {
+    // Handle 'list' parameter (dnf list updates, yum list installed, etc.)
+    if let Some(list_type) = get_str(args, "list") {
+        return Ok(ModuleConversionResult {
+            action_line: format!("package: list {}", list_type),
+            additional_lines: vec![],
+            warnings: vec![],
+        });
+    }
+
     // Handle update_cache for apt - check if update_cache is present and no name is provided
     if let Some(update_cache) = get_bool(args, "update_cache") {
         let has_name = get_str(args, "name").is_some()

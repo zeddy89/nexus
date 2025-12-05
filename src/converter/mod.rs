@@ -513,6 +513,39 @@ impl Converter {
             }
         }
 
+        // changed_when
+        if let Some(changed_when) = &task.changed_when {
+            let expr = match changed_when {
+                serde_yaml::Value::Bool(b) => b.to_string(),
+                serde_yaml::Value::String(s) => {
+                    let converted = self.expression_converter.convert_condition(s);
+                    converted.output
+                }
+                _ => serde_yaml::to_string(changed_when).unwrap_or_default(),
+            };
+            output.push_str(&format!("    changed_when: {}\n", expr));
+        }
+
+        // failed_when
+        if let Some(failed_when) = &task.failed_when {
+            let expr = match failed_when {
+                serde_yaml::Value::Bool(b) => b.to_string(),
+                serde_yaml::Value::String(s) => {
+                    let converted = self.expression_converter.convert_condition(s);
+                    converted.output
+                }
+                _ => serde_yaml::to_string(failed_when).unwrap_or_default(),
+            };
+            output.push_str(&format!("    failed_when: {}\n", expr));
+        }
+
+        // ignore_errors
+        if let Some(ignore_errors) = task.ignore_errors {
+            if ignore_errors {
+                output.push_str("    ignore_errors: true\n");
+            }
+        }
+
         output.push('\n');
 
         Ok((output, issues, needs_review))
