@@ -304,8 +304,17 @@ impl Converter {
         }
 
         // Tasks
-        if !play.tasks.is_empty() {
+        if !play.tasks.is_empty() || play.gather_facts == Some(true) {
             output.push_str("\ntasks:\n");
+
+            // Add gather_facts task if enabled
+            if play.gather_facts == Some(true) {
+                output.push_str("  - name: Gather facts\n");
+                output.push_str("    facts: all\n\n");
+                total_tasks += 1;
+                converted_tasks += 1;
+            }
+
             for task in &play.tasks {
                 let (task_output, task_issues, needs_review) = self.convert_task(task)?;
                 output.push_str(&task_output);
