@@ -250,10 +250,8 @@ impl ExpressionConverter {
         let default_re = Regex::new(r"([\w.]+)\s*\|\s*default\(([^)]+)\)").unwrap();
         output = default_re.replace_all(&output, "($1 ?? $2)").to_string();
 
-        // Convert boolean operators
-        output = output.replace(" and ", " && ");
-        output = output.replace(" or ", " || ");
-        output = output.replace(" not ", " !");
+        // Keep boolean operators as-is (Nexus uses 'and', 'or', 'not' like Python)
+        // No conversion needed - Ansible and Nexus use the same keywords
 
         // Convert any remaining Jinja2 {{ }} expressions
         let result = self.convert_string(&output);
@@ -353,7 +351,7 @@ mod tests {
         );
         assert_eq!(
             result.output,
-            "${available_updates.results != null && available_updates.results.len() > 0}"
+            "${available_updates.results != null and available_updates.results.len() > 0}"
         );
     }
 }
