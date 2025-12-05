@@ -311,6 +311,83 @@ impl Converter {
             }
         }
 
+        // Pre-tasks
+        if !play.pre_tasks.is_empty() {
+            output.push_str("\npre_tasks:\n");
+            for task in &play.pre_tasks {
+                let (task_output, task_issues, needs_review) = self.convert_task(task)?;
+                output.push_str(&task_output);
+
+                total_tasks += 1;
+                if needs_review {
+                    review_tasks += 1;
+                } else {
+                    converted_tasks += 1;
+                }
+                issues.extend(task_issues);
+            }
+        }
+
+        // Roles
+        if !play.roles.is_empty() {
+            output.push_str("\nroles:\n");
+            for role in &play.roles {
+                match role {
+                    serde_yaml::Value::String(role_name) => {
+                        // Simple role: just a name
+                        output.push_str(&format!("  - {}\n", role_name));
+                    }
+                    serde_yaml::Value::Mapping(role_map) => {
+                        // Complex role with parameters
+                        if let Some(name_val) = role_map.get(serde_yaml::Value::String("role".to_string())) {
+                            if let Some(role_name) = name_val.as_str() {
+                                output.push_str(&format!("  - role: {}\n", role_name));
+
+                                // Add any other parameters
+                                for (key, value) in role_map {
+                                    if let Some(key_str) = key.as_str() {
+                                        if key_str != "role" {
+                                            let value_str = serde_yaml::to_string(value).unwrap_or_default().trim().to_string();
+                                            output.push_str(&format!("    {}: {}\n", key_str, value_str));
+                                        }
+                                    }
+                                }
+                            }
+                        } else if let Some(name_val) = role_map.get(serde_yaml::Value::String("name".to_string())) {
+                            // Alternative format with 'name' instead of 'role'
+                            if let Some(role_name) = name_val.as_str() {
+                                output.push_str(&format!("  - role: {}\n", role_name));
+
+                                for (key, value) in role_map {
+                                    if let Some(key_str) = key.as_str() {
+                                        if key_str != "name" {
+                                            let value_str = serde_yaml::to_string(value).unwrap_or_default().trim().to_string();
+                                            output.push_str(&format!("    {}: {}\n", key_str, value_str));
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Unknown role format - output as-is with warning
+                            let role_yaml = serde_yaml::to_string(role).unwrap_or_default();
+                            output.push_str(&format!("  # TODO: Complex role format\n  # {}\n", role_yaml.trim().replace('\n', "\n  # ")));
+                            issues.push(ConversionIssue::warning(
+                                "Complex role format may need manual review".to_string()
+                            ));
+                        }
+                    }
+                    _ => {
+                        // Unknown format
+                        let role_yaml = serde_yaml::to_string(role).unwrap_or_default();
+                        output.push_str(&format!("  # TODO: Unknown role format\n  # {}\n", role_yaml.trim()));
+                        issues.push(ConversionIssue::warning(
+                            "Unknown role format - manual conversion required".to_string()
+                        ));
+                    }
+                }
+            }
+        }
+
         // Tasks
         if !play.tasks.is_empty() || play.gather_facts == Some(true) {
             output.push_str("\ntasks:\n");
@@ -337,6 +414,23 @@ impl Converter {
             }
         }
 
+        // Post-tasks
+        if !play.post_tasks.is_empty() {
+            output.push_str("\npost_tasks:\n");
+            for task in &play.post_tasks {
+                let (task_output, task_issues, needs_review) = self.convert_task(task)?;
+                output.push_str(&task_output);
+
+                total_tasks += 1;
+                if needs_review {
+                    review_tasks += 1;
+                } else {
+                    converted_tasks += 1;
+                }
+                issues.extend(task_issues);
+            }
+        }
+
         // Handlers
         if !play.handlers.is_empty() {
             output.push_str("\nhandlers:\n");
@@ -350,7 +444,7 @@ impl Converter {
         Ok((output, (total_tasks, converted_tasks, review_tasks), issues))
     }
 
-    fn convert_task(
+    pub(crate) fn convert_task(
         &self,
         task: &AnsibleTask,
     ) -> Result<(String, Vec<ConversionIssue>, bool), NexusError> {
@@ -358,10 +452,18 @@ impl Converter {
         let mut issues = Vec::new();
         let mut needs_review = false;
 
+        // Handle block/rescue/always structure - these are handled at the end of the function
+        // If this is a block task, we don't need a module
+        let is_block_task = task.block.is_some() || task.rescue.is_some() || task.always.is_some();
+
         // Task name
         output.push_str("  - ");
         if let Some(name) = &task.name {
-            output.push_str(&format!("name: {}\n    ", name));
+            if is_block_task {
+                output.push_str(&format!("name: {}\n", name));
+            } else {
+                output.push_str(&format!("name: {}\n    ", name));
+            }
         }
 
         // Find the module being used
@@ -420,39 +522,41 @@ impl Converter {
             }
         }
 
-        // Convert the module
-        if let (Some(name), Some(args)) = (module_name, module_args) {
-            match self.module_mapper.convert(&name, &args) {
-                Ok(conv_result) => {
-                    output.push_str(&conv_result.action_line);
-                    output.push('\n');
+        // Convert the module (skip if this is a block task)
+        if !is_block_task {
+            if let (Some(name), Some(args)) = (module_name, module_args) {
+                match self.module_mapper.convert(&name, &args) {
+                    Ok(conv_result) => {
+                        output.push_str(&conv_result.action_line);
+                        output.push('\n');
 
-                    for line in &conv_result.additional_lines {
-                        output.push_str(&format!("    {}\n", line));
+                        for line in &conv_result.additional_lines {
+                            output.push_str(&format!("    {}\n", line));
+                        }
+
+                        for warning in conv_result.warnings {
+                            issues.push(ConversionIssue::warning(warning));
+                            needs_review = true;
+                        }
                     }
-
-                    for warning in conv_result.warnings {
-                        issues.push(ConversionIssue::warning(warning));
+                    Err(e) => {
+                        output.push_str(&format!("# TODO: {}\n", e));
+                        issues.push(ConversionIssue::error(e));
                         needs_review = true;
                     }
                 }
-                Err(e) => {
-                    output.push_str(&format!("# TODO: {}\n", e));
-                    issues.push(ConversionIssue::error(e));
+            } else {
+                // Unknown module
+                let unknown_modules: Vec<_> = task.module_args.keys().collect();
+                if !unknown_modules.is_empty() {
+                    let first_module = unknown_modules[0];
+                    output.push_str(&format!("# TODO: Unknown module '{}'\n", first_module));
+                    issues.push(ConversionIssue::warning(format!(
+                        "Unknown module: {}",
+                        first_module
+                    )));
                     needs_review = true;
                 }
-            }
-        } else {
-            // Unknown module
-            let unknown_modules: Vec<_> = task.module_args.keys().collect();
-            if !unknown_modules.is_empty() {
-                let first_module = unknown_modules[0];
-                output.push_str(&format!("# TODO: Unknown module '{}'\n", first_module));
-                issues.push(ConversionIssue::warning(format!(
-                    "Unknown module: {}",
-                    first_module
-                )));
-                needs_review = true;
             }
         }
 
@@ -512,6 +616,144 @@ impl Converter {
                     .to_string(),
             };
             output.push_str(&format!("    loop: {}\n", items_str));
+        } else if let Some(with_dict) = &task.with_dict {
+            // Convert with_dict to loop with dict2items filter
+            let dict_str = match with_dict {
+                serde_yaml::Value::String(s) => {
+                    let converted = self.expression_converter.convert_string(s);
+                    format!("${{{{ {} | dict2items }}}}", converted.output.trim_matches(|c| c == '$' || c == '{' || c == '}'))
+                }
+                other => {
+                    let yaml_str = serde_yaml::to_string(other).unwrap_or_default().trim().to_string();
+                    format!("${{{{ {} | dict2items }}}}", yaml_str)
+                }
+            };
+            output.push_str(&format!("    loop: {}\n", dict_str));
+            issues.push(ConversionIssue::warning(
+                "with_dict converted to loop with dict2items filter - verify behavior".to_string()
+            ));
+            needs_review = true;
+        } else if let Some(with_together) = &task.with_together {
+            // Convert with_together to loop with zip filter
+            let together_str = match with_together {
+                serde_yaml::Value::Sequence(seq) => {
+                    let items: Vec<String> = seq
+                        .iter()
+                        .map(|v| match v {
+                            serde_yaml::Value::String(s) => {
+                                let converted = self.expression_converter.convert_string(s);
+                                converted.output.trim_matches(|c| c == '$' || c == '{' || c == '}').to_string()
+                            }
+                            other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                        })
+                        .collect();
+                    format!("${{{{ zip({}) }}}}", items.join(", "))
+                }
+                other => {
+                    format!("# TODO: Complex with_together: {:?}", other)
+                }
+            };
+            output.push_str(&format!("    loop: {}\n", together_str));
+            issues.push(ConversionIssue::warning(
+                "with_together converted to loop with zip - verify behavior".to_string()
+            ));
+            needs_review = true;
+        } else if let Some(with_nested) = &task.with_nested {
+            // with_nested creates cartesian product - may need special handling
+            output.push_str("    # TODO: with_nested requires cartesian product\n");
+            output.push_str(&format!("    # loop: # with_nested: {:?}\n", with_nested));
+            issues.push(ConversionIssue::error(
+                "with_nested (cartesian product) not directly supported - manual conversion required".to_string()
+            ));
+            needs_review = true;
+        } else if let Some(with_sequence) = &task.with_sequence {
+            // Parse sequence parameters and convert to range
+            let sequence_str = match with_sequence {
+                serde_yaml::Value::String(s) => {
+                    // Parse "start=1 end=10 stride=2" format
+                    let mut start = "0";
+                    let mut end = "10";
+                    let mut stride = "1";
+
+                    for part in s.split_whitespace() {
+                        if let Some(val) = part.strip_prefix("start=") {
+                            start = val;
+                        } else if let Some(val) = part.strip_prefix("end=") {
+                            end = val;
+                        } else if let Some(val) = part.strip_prefix("stride=") {
+                            stride = val;
+                        }
+                    }
+
+                    if stride == "1" {
+                        format!("${{{{ range({}, {} + 1) }}}}", start, end)
+                    } else {
+                        format!("${{{{ range({}, {} + 1, {}) }}}}", start, end, stride)
+                    }
+                }
+                other => format!("# TODO: Complex with_sequence: {:?}", other),
+            };
+            output.push_str(&format!("    loop: {}\n", sequence_str));
+            issues.push(ConversionIssue::warning(
+                "with_sequence converted to range - verify parameters".to_string()
+            ));
+            needs_review = true;
+        } else if let Some(with_fileglob) = &task.with_fileglob {
+            // with_fileglob uses fileglob lookup
+            let fileglob_str = match with_fileglob {
+                serde_yaml::Value::String(s) => {
+                    format!("${{{{ fileglob('{}') }}}}", s)
+                }
+                serde_yaml::Value::Sequence(seq) => {
+                    let patterns: Vec<String> = seq
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| format!("'{}'", s)))
+                        .collect();
+                    format!("${{{{ fileglob([{}]) }}}}", patterns.join(", "))
+                }
+                other => format!("# TODO: Complex with_fileglob: {:?}", other),
+            };
+            output.push_str(&format!("    loop: {}\n", fileglob_str));
+            issues.push(ConversionIssue::warning(
+                "with_fileglob converted to fileglob lookup - verify path resolution".to_string()
+            ));
+            needs_review = true;
+        } else if let Some(with_subelements) = &task.with_subelements {
+            // with_subelements is complex - flag for manual conversion
+            output.push_str("    # TODO: with_subelements requires manual conversion\n");
+            output.push_str(&format!("    # loop: # with_subelements: {:?}\n", with_subelements));
+            issues.push(ConversionIssue::error(
+                "with_subelements not directly supported - manual conversion required".to_string()
+            ));
+            needs_review = true;
+        }
+
+        // Loop control variables
+        if let Some(loop_control) = &task.loop_control {
+            if let Some(loop_var) = loop_control.get("loop_var") {
+                if let Some(var_name) = loop_var.as_str() {
+                    output.push_str(&format!("    loop_var: {}\n", var_name));
+                }
+            }
+            if let Some(index_var) = loop_control.get("index_var") {
+                if let Some(var_name) = index_var.as_str() {
+                    output.push_str(&format!("    index_var: {}\n", var_name));
+                }
+            }
+            if let Some(label) = loop_control.get("label") {
+                let label_str = match label {
+                    serde_yaml::Value::String(s) => s.clone(),
+                    other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                };
+                output.push_str(&format!("    loop_label: {}\n", label_str));
+            }
+            // Check for other loop_control options that might need warnings
+            if loop_control.contains_key("pause") {
+                issues.push(ConversionIssue::warning(
+                    "loop_control.pause not directly supported in Nexus".to_string()
+                ));
+                needs_review = true;
+            }
         }
 
         // Tags
@@ -568,6 +810,89 @@ impl Converter {
             output.push_str("    sudo: true\n");
             if let Some(ref user) = task.become_user {
                 output.push_str(&format!("    sudo_user: {}\n", user));
+            }
+        }
+
+        // delegate_to
+        if let Some(delegate_to) = &task.delegate_to {
+            output.push_str(&format!("    delegate_to: {}\n", delegate_to));
+        }
+
+        // run_once
+        if task.run_once == Some(true) {
+            output.push_str("    run_once: true\n");
+        }
+
+        // async and poll
+        if let Some(async_val) = task.r#async {
+            output.push_str(&format!("    async: {}\n", async_val));
+            if let Some(poll_val) = task.poll {
+                output.push_str(&format!("    poll: {}\n", poll_val));
+            }
+        }
+
+        // throttle
+        if let Some(throttle) = task.throttle {
+            output.push_str(&format!("    throttle: {}\n", throttle));
+        }
+
+        // Handle block/rescue/always
+        if task.block.is_some() || task.rescue.is_some() || task.always.is_some() {
+            // Block tasks
+            if let Some(block_tasks) = &task.block {
+                output.push_str("    block:\n");
+                for block_task in block_tasks {
+                    let (task_output, task_issues, task_needs_review) = self.convert_task(block_task)?;
+                    // Indent the task output by 2 more spaces
+                    let indented = task_output.lines()
+                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    output.push_str(&indented);
+
+                    if task_needs_review {
+                        needs_review = true;
+                    }
+                    issues.extend(task_issues);
+                }
+            }
+
+            // Rescue tasks
+            if let Some(rescue_tasks) = &task.rescue {
+                output.push_str("    rescue:\n");
+                for rescue_task in rescue_tasks {
+                    let (task_output, task_issues, task_needs_review) = self.convert_task(rescue_task)?;
+                    // Indent the task output by 2 more spaces
+                    let indented = task_output.lines()
+                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    output.push_str(&indented);
+
+                    if task_needs_review {
+                        needs_review = true;
+                    }
+                    issues.extend(task_issues);
+                }
+            }
+
+            // Always tasks
+            if let Some(always_tasks) = &task.always {
+                output.push_str("    always:\n");
+                for always_task in always_tasks {
+                    let (task_output, task_issues, task_needs_review) = self.convert_task(always_task)?;
+                    // Indent the task output by 2 more spaces
+                    let indented = task_output.lines()
+                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    output.push_str(&indented);
+
+                    if task_needs_review {
+                        needs_review = true;
+                    }
+                    issues.extend(task_issues);
+                }
             }
         }
 

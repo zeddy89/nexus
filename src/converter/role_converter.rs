@@ -233,31 +233,20 @@ impl<'a> RoleConverter<'a> {
         let mut output_content = String::new();
 
         for task in &tasks {
-            // For now, just serialize back to YAML with .nx extension
-            // In the future, this would call converter.convert_task(task)
-            let task_yaml = serde_yaml::to_string(task).map_err(|e| {
-                NexusError::Parse(Box::new(crate::output::errors::ParseError {
-                    kind: crate::output::errors::ParseErrorKind::InvalidYaml,
-                    message: format!("Failed to serialize task: {}", e),
-                    file: Some(source.display().to_string()),
-                    line: None,
-                    column: None,
-                    suggestion: None,
-                }))
-            })?;
-
-            output_content.push_str("- ");
-            output_content.push_str(&task_yaml);
+            // Use the converter's task conversion logic
+            let (task_output, task_issues, needs_review) = self.converter.convert_task(task)?;
+            output_content.push_str(&task_output);
 
             result.tasks_total += 1;
-            result.tasks_converted += 1;
+            if needs_review {
+                result.tasks_need_review += 1;
+            } else {
+                result.tasks_converted += 1;
+            }
 
-            // Add info about tasks that might need review
-            if task.module_args.is_empty() {
-                result.add_issue(ConversionIssue::info(format!(
-                    "Task '{}' has no module arguments",
-                    task.name.as_deref().unwrap_or("unnamed")
-                )));
+            // Add any issues from the conversion
+            for issue in task_issues {
+                result.add_issue(issue);
             }
         }
 

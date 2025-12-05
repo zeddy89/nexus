@@ -54,6 +54,14 @@ impl ExpressionConverter {
         filter_map.insert("values", FilterConversion::Method("values"));
         filter_map.insert("items", FilterConversion::Method("items"));
 
+        // Mathematical and utility filters
+        filter_map.insert("abs", FilterConversion::Method("abs"));
+        filter_map.insert("min", FilterConversion::Method("min"));
+        filter_map.insert("max", FilterConversion::Method("max"));
+        filter_map.insert("sum", FilterConversion::Method("sum"));
+        filter_map.insert("round", FilterConversion::Method("round"));
+        filter_map.insert("quote", FilterConversion::Method("shell_quote"));
+
         // Methods with arguments
         filter_map.insert("join", FilterConversion::MethodWithArgs("join"));
         filter_map.insert("split", FilterConversion::MethodWithArgs("split"));
@@ -62,6 +70,13 @@ impl ExpressionConverter {
             "regex_replace",
             FilterConversion::MethodWithArgs("regex_replace"),
         );
+        filter_map.insert("selectattr", FilterConversion::MethodWithArgs("select_attr"));
+        filter_map.insert("rejectattr", FilterConversion::MethodWithArgs("reject_attr"));
+        filter_map.insert("map", FilterConversion::MethodWithArgs("map"));
+        filter_map.insert("select", FilterConversion::MethodWithArgs("select"));
+        filter_map.insert("reject", FilterConversion::MethodWithArgs("reject"));
+
+        // Custom conversions
         filter_map.insert("default", FilterConversion::Custom(convert_default));
         filter_map.insert("d", FilterConversion::Custom(convert_default));
         filter_map.insert("ternary", FilterConversion::Custom(convert_ternary));
@@ -237,10 +252,44 @@ impl ExpressionConverter {
         let skipped_re = Regex::new(r"([\w.]+)\s+is\s+skipped").unwrap();
         output = skipped_re.replace_all(&output, "$1.skipped").to_string();
 
+        // Handle type checking tests
+        let number_re = Regex::new(r"([\w.]+)\s+is\s+number").unwrap();
+        output = number_re.replace_all(&output, "$1.is_number()").to_string();
+
+        let string_re = Regex::new(r"([\w.]+)\s+is\s+string").unwrap();
+        output = string_re.replace_all(&output, "$1.is_string()").to_string();
+
+        // Handle "is mapping" and "is dict" (synonyms in Jinja2)
+        let mapping_re = Regex::new(r"([\w.]+)\s+is\s+mapping").unwrap();
+        output = mapping_re.replace_all(&output, "$1.is_dict()").to_string();
+
+        let dict_re = Regex::new(r"([\w.]+)\s+is\s+dict").unwrap();
+        output = dict_re.replace_all(&output, "$1.is_dict()").to_string();
+
+        // Handle "is sequence" and "is list" (synonyms in Jinja2)
+        let sequence_re = Regex::new(r"([\w.]+)\s+is\s+sequence").unwrap();
+        output = sequence_re.replace_all(&output, "$1.is_list()").to_string();
+
+        let list_re = Regex::new(r"([\w.]+)\s+is\s+list").unwrap();
+        output = list_re.replace_all(&output, "$1.is_list()").to_string();
+
+        // Handle "is divisibleby(n)"
+        let divisibleby_re = Regex::new(r"([\w.]+)\s+is\s+divisibleby\((.+?)\)").unwrap();
+        output = divisibleby_re
+            .replace_all(&output, "$1 % $2 == 0")
+            .to_string();
+
+        // Handle "is sameas(value)"
+        let sameas_re = Regex::new(r"([\w.]+)\s+is\s+sameas\((.+?)\)").unwrap();
+        output = sameas_re
+            .replace_all(&output, "$1 === $2")
+            .to_string();
+
         // Handle "is search" and "is match"
+        // Note: Ansible's "is search" does regex matching, not substring matching
         let search_re = Regex::new(r"([\w.]+)\s+is\s+search\('(.+?)'\)").unwrap();
         output = search_re
-            .replace_all(&output, "$1.contains('$2')")
+            .replace_all(&output, "$1.matches('$2')")
             .to_string();
 
         let match_re = Regex::new(r"([\w.]+)\s+is\s+match\('(.+?)'\)").unwrap();
@@ -278,7 +327,9 @@ impl ExpressionConverter {
 
         // Wrap the entire condition in ${...} if it's not already
         // and doesn't start with a literal string/number
-        let needs_wrap = !output.starts_with("${")
+        // NOTE: convert_string() may have already added ${} wrapping, so check for that first
+        let already_wrapped = output.starts_with("${");
+        let needs_wrap = !already_wrapped
             && !output.starts_with('"')
             && !output.starts_with('\'')
             && !output.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
