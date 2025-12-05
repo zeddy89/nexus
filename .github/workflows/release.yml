@@ -70,7 +70,7 @@ jobs:
           shasum -a 256 "${ARTIFACT_NAME}.tar.gz" > "${ARTIFACT_NAME}.tar.gz.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: nexus-${{ steps.version.outputs.VERSION }}-${{ matrix.name }}
           path: |
