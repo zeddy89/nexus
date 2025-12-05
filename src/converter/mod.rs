@@ -294,6 +294,14 @@ impl Converter {
         // Hosts
         output.push_str(&format!("hosts: {}\n", play.hosts));
 
+        // Become -> sudo
+        if play.r#become == Some(true) {
+            output.push_str("sudo: true\n");
+            if let Some(ref user) = play.become_user {
+                output.push_str(&format!("sudo_user: {}\n", user));
+            }
+        }
+
         // Variables
         if !play.vars.is_empty() {
             output.push_str("\nvars:\n");
@@ -552,6 +560,14 @@ impl Converter {
         if let Some(ignore_errors) = task.ignore_errors {
             if ignore_errors {
                 output.push_str("    ignore_errors: true\n");
+            }
+        }
+
+        // become -> sudo (task level)
+        if task.r#become == Some(true) {
+            output.push_str("    sudo: true\n");
+            if let Some(ref user) = task.become_user {
+                output.push_str(&format!("    sudo_user: {}\n", user));
             }
         }
 
