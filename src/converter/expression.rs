@@ -230,9 +230,9 @@ impl ExpressionConverter {
             .to_string();
 
         // Convert Jinja2 filters in conditions
-        // Handle "var | length" -> "var.len()"
+        // Handle "var | length" -> "len(var)"
         let length_re = Regex::new(r"([\w.]+)\s*\|\s*length").unwrap();
-        output = length_re.replace_all(&output, "$1.len()").to_string();
+        output = length_re.replace_all(&output, "len($1)").to_string();
 
         // Handle "var | int" -> "var.to_int()"
         let int_re = Regex::new(r"([\w.]+)\s*\|\s*int").unwrap();
@@ -351,7 +351,7 @@ mod tests {
         );
         assert_eq!(
             result.output,
-            "${available_updates.results != null and available_updates.results.len() > 0}"
+            "${available_updates.results != null and len(available_updates.results) > 0}"
         );
     }
 }
