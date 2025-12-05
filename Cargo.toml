@@ -35,7 +35,7 @@ indicatif = "0.17"
 console = "0.15"
 colored = "2"
 ratatui = "0.28"
-crossterm = "0.28"
+crossterm = "0.29"
 
 # Error handling
 anyhow = "1"
