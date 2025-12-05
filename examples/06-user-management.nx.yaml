@@ -1,0 +1,82 @@
+# User Management
+#
+# Demonstrates creating and managing users with loops and conditionals.
+# Run with:
+#   nexus run 06-user-management.nx.yaml -i inventory.yaml --sudo
+
+hosts: all
+
+vars:
+  admin_users:
+    - name: jdoe
+      uid: 1001
+      groups: [wheel, docker]
+      shell: /bin/bash
+      ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... jdoe@example.com"
+    - name: asmith
+      uid: 1002
+      groups: [wheel]
+      shell: /bin/zsh
+
+  service_accounts:
+    - name: deploy
+      uid: 2001
+      groups: [docker]
+      shell: /sbin/nologin
+
+  users_to_remove:
+    - olduser1
+    - olduser2
+
+tasks:
+  - name: Create admin users
+    user: ${item.name}
+    state: present
+    uid: ${item.uid}
+    groups: ${item.groups}
+    shell: ${item.shell}
+    create_home: true
+    sudo: true
+    loop: ${vars.admin_users}
+
+  - name: Create .ssh directory for admin users
+    file: /home/${item.name}/.ssh
+    state: directory
+    owner: ${item.name}
+    group: ${item.name}
+    mode: "0700"
+    sudo: true
+    loop: ${vars.admin_users}
+
+  - name: Add SSH keys for admin users
+    file: /home/${item.name}/.ssh/authorized_keys
+    content: ${item.ssh_key}
+    owner: ${item.name}
+    group: ${item.name}
+    mode: "0600"
+    sudo: true
+    loop: ${vars.admin_users | filter(u => u.ssh_key != null)}
+
+  - name: Create service accounts
+    user: ${item.name}
+    state: present
+    uid: ${item.uid}
+    groups: ${item.groups}
+    shell: ${item.shell}
+    create_home: false
+    sudo: true
+    loop: ${vars.service_accounts}
+
+  - name: Remove old users
+    user: ${item}
+    state: absent
+    sudo: true
+    loop: ${vars.users_to_remove}
+
+  - name: Ensure wheel group can sudo without password
+    file: /etc/sudoers.d/wheel
+    content: "%wheel ALL=(ALL) NOPASSWD: ALL"
+    owner: root
+    group: root
+    mode: "0440"
+    sudo: true

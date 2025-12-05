@@ -1,0 +1,64 @@
+# System Patching
+#
+# A practical example of system patching with pre-flight checks.
+# Checks disk space before updating, reports available updates,
+# and shows if a reboot is required.
+#
+# Run with:
+#   nexus run 09-system-patching.nx.yaml -i inventory.yaml --sudo
+#
+# Or check what would happen without making changes:
+#   nexus run 09-system-patching.nx.yaml -i inventory.yaml --sudo --check
+
+hosts: all
+
+vars:
+  max_disk_percent: 90
+  auto_reboot: false
+
+tasks:
+  # Pre-flight check - ensure enough disk space before patching
+  - name: Check disk usage
+    command: df / | awk 'NR==2 {print $5}' | tr -d '%'
+    register: disk_pct
+    fail_when: ${int(disk_pct.stdout) > vars.max_disk_percent}
+
+  # Check how many updates are available
+  - name: Check available updates
+    command: apt list --upgradable 2>/dev/null | tail -n +2 | wc -l | tr -d ' '
+    register: update_count
+    sudo: true
+
+  # Show update count
+  - name: Report available updates
+    command: echo "Found ${update_count.stdout} packages to update on ${host.name}"
+    when: ${int(update_count.stdout) > 0}
+
+  # Apply updates if there are any
+  - name: Update package cache
+    command: apt-get update
+    when: ${int(update_count.stdout) > 0}
+    sudo: true
+
+  - name: Upgrade packages
+    command: apt-get upgrade -y
+    when: ${int(update_count.stdout) > 0}
+    sudo: true
+
+  # Check if reboot is required
+  - name: Check if reboot required
+    command: test -f /var/run/reboot-required && echo "REBOOT_REQUIRED" || echo "NO_REBOOT"
+    register: reboot_status
+
+  # Show final status
+  - name: Report patching status
+    command: |
+      echo "=== Patching Summary for ${host.name} ==="
+      echo "Disk usage: ${disk_pct.stdout}%"
+      echo "Updates applied: ${update_count.stdout}"
+      echo "Reboot status: ${reboot_status.stdout}"
+
+  - name: Schedule reboot if required and auto-reboot enabled
+    command: shutdown -r +1 "System will reboot in 1 minute for patching"
+    when: ${reboot_status.stdout == "REBOOT_REQUIRED" and vars.auto_reboot}
+    sudo: true

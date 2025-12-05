@@ -1,0 +1,53 @@
+# Webserver role tasks
+- name: Install nginx
+  package: nginx
+  state: installed
+  sudo: true
+  tags:
+    - packages
+    - nginx
+
+- name: Create web root directory
+  file: "${vars.web_root}"
+  state: directory
+  owner: "${vars.nginx_user}"
+  group: "${vars.nginx_group}"
+  mode: "0755"
+  sudo: true
+  tags:
+    - config
+
+- name: Deploy nginx configuration
+  template: "${role_templates_path}/nginx.conf.j2"
+  dest: /etc/nginx/nginx.conf
+  owner: root
+  group: root
+  mode: "0644"
+  sudo: true
+  notify:
+    - restart nginx
+  tags:
+    - config
+    - nginx
+
+- name: Deploy default site
+  template: "${role_templates_path}/default-site.conf.j2"
+  dest: /etc/nginx/sites-available/default
+  owner: root
+  group: root
+  mode: "0644"
+  sudo: true
+  notify:
+    - reload nginx
+  tags:
+    - config
+    - nginx
+
+- name: Enable nginx service
+  service: nginx
+  state: running
+  enabled: true
+  sudo: true
+  tags:
+    - service
+    - nginx

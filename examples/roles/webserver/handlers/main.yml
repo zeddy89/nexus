@@ -1,0 +1,10 @@
+# Webserver role handlers
+- name: restart nginx
+  service: nginx
+  state: restarted
+  sudo: true
+
+- name: reload nginx
+  service: nginx
+  state: reloaded
+  sudo: true

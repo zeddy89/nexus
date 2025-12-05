@@ -1,0 +1,17 @@
+# Webserver role metadata
+dependencies:
+  - common
+
+galaxy_info:
+  description: Install and configure nginx webserver
+  author: Nexus Team
+  license: MIT
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "20.04"
+        - "22.04"
+    - name: Debian
+      versions:
+        - "11"
+        - "12"

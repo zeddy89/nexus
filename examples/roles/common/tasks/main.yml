@@ -1,0 +1,21 @@
+# Common role - base setup tasks
+- name: Update package cache
+  command: apt-get update
+  sudo: true
+  tags:
+    - packages
+    - setup
+
+- name: Install common packages
+  package: "${item}"
+  state: installed
+  loop: vars.common_packages
+  sudo: true
+  tags:
+    - packages
+
+- name: Set timezone
+  command: "timedatectl set-timezone ${vars.timezone}"
+  sudo: true
+  tags:
+    - config

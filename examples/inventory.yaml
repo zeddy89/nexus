@@ -1,0 +1,75 @@
+# Example Nexus inventory file
+# Supports both simple format and Ansible-style nested format
+
+# Default settings
+defaults:
+  user: admin
+
+# All hosts and their groups
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+          environment: PRD
+          role: frontend
+        web2:
+          ansible_host: 192.168.1.11
+          environment: PRD
+          role: frontend
+        web3:
+          ansible_host: 192.168.1.12
+          environment: STG
+          role: frontend
+      vars:
+        http_port: 80
+        document_root: /var/www/html
+
+    databases:
+      hosts:
+        db1:
+          ansible_host: 192.168.1.20
+          environment: PRD
+          role: primary
+        db2:
+          ansible_host: 192.168.1.21
+          environment: PRD
+          role: replica
+      vars:
+        postgres_version: 15
+        data_directory: /var/lib/postgresql/data
+
+    loadbalancers:
+      hosts:
+        lb1:
+          ansible_host: 192.168.1.5
+          environment: PRD
+      vars:
+        vip: 192.168.1.100
+
+    # Logical groups
+    production:
+      children:
+        - webservers
+        - databases
+      vars:
+        environment: PRD
+        monitoring_enabled: true
+
+    staging:
+      hosts:
+        staging1:
+          ansible_host: 192.168.2.10
+          environment: STG
+      vars:
+        environment: STG
+        monitoring_enabled: false
+
+    # All servers that need patching
+    all_servers:
+      children:
+        - webservers
+        - databases
+        - loadbalancers
+        - staging

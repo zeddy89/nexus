@@ -1,0 +1,90 @@
+// Nexus Expression Grammar
+// Used for ${...} substitutions and when/fail_when conditions
+
+WHITESPACE = _{ " " | "\t" }
+COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
+
+// Entry points
+expression = { SOI ~ or_expr ~ EOI }
+interpolation = { SOI ~ interpolated_string ~ EOI }
+
+// Operators by precedence (lowest to highest)
+or_expr = { and_expr ~ ("or" ~ and_expr)* }
+and_expr = { not_expr ~ ("and" ~ not_expr)* }
+not_expr = { "not" ~ not_expr | comparison }
+comparison = { additive ~ (comp_op ~ additive)* }
+additive = { multiplicative ~ (add_op ~ multiplicative)* }
+multiplicative = { unary ~ (mul_op ~ unary)* }
+unary = { unary_op ~ unary | postfix }
+postfix = { primary ~ postfix_op* }
+
+// Operators
+comp_op = { ">=" | "<=" | "==" | "!=" | ">" | "<" | "not" ~ "in" | "in" }
+add_op = { "+" | "-" }
+mul_op = { "*" | "/" | "%" }
+unary_op = { "-" | "!" }
+
+// Postfix operations
+postfix_op = { call | index | attribute }
+call = { "(" ~ args? ~ ")" }
+index = { "[" ~ or_expr ~ "]" }
+attribute = { "." ~ ident }
+
+// Function arguments
+args = { arg ~ ("," ~ arg)* ~ ","? }
+arg = { kwarg | or_expr }
+kwarg = { ident ~ "=" ~ or_expr }
+
+// Primary expressions
+primary = {
+    "(" ~ or_expr ~ ")"
+    | lambda
+    | list_literal
+    | dict_literal
+    | float_literal
+    | int_literal
+    | bool_literal
+    | null_literal
+    | string_literal
+    | variable
+}
+
+// Literals
+float_literal = @{ int_literal ~ "." ~ ASCII_DIGIT+ }
+int_literal = @{ "-"? ~ ASCII_DIGIT+ }
+bool_literal = { "true" | "false" }
+null_literal = { "null" | "None" }
+
+// String literals (both single and double quoted)
+string_literal = ${
+    "\"" ~ string_content_double ~ "\""
+    | "'" ~ string_content_single ~ "'"
+}
+string_content_double = @{ (!"\"" ~ !"\\" ~ ANY | escape_seq)* }
+string_content_single = @{ (!"'" ~ !"\\" ~ ANY | escape_seq)* }
+escape_seq = @{ "\\" ~ ("n" | "r" | "t" | "\\" | "\"" | "'" | "${") }
+
+// Interpolated strings (for use within ${...} contexts)
+interpolated_string = { interpolated_part+ }
+interpolated_part = { interpolation_expr | literal_text }
+interpolation_expr = { "${" ~ or_expr ~ "}" }
+literal_text = @{ (!("${" | EOI) ~ ANY)+ }
+
+// Collections
+list_literal = { "[" ~ (or_expr ~ ("," ~ or_expr)* ~ ","?)? ~ "]" }
+dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)* ~ ","?)? ~ "}" }
+dict_entry = { (string_literal | ident) ~ ":" ~ or_expr }
+
+// Lambda/arrow functions
+lambda = { lambda_params ~ "=>" ~ or_expr }
+lambda_params = { ident | "(" ~ (ident ~ ("," ~ ident)*)? ~ ")" }
+
+// Variables (including dotted paths)
+variable = { ident ~ ("." ~ ident)* }
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Filter expressions (pipe syntax)
+filter_expr = { primary ~ ("|" ~ filter_call)+ }
+filter_call = { ident ~ ("(" ~ args? ~ ")")? }
+
+NEWLINE = _{ "\n" | "\r\n" }

@@ -1,0 +1,23 @@
+# Simple Inventory
+#
+# A minimal inventory for getting started with Nexus.
+# Replace the IP addresses with your actual servers.
+
+defaults:
+  user: ubuntu
+
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 192.168.1.10
+        web2:
+          ansible_host: 192.168.1.11
+      vars:
+        http_port: 80
+
+    databases:
+      hosts:
+        db1:
+          ansible_host: 192.168.1.20

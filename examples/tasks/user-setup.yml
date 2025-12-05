@@ -1,0 +1,26 @@
+# Reusable User Setup Tasks
+#
+# Include in playbooks with:
+#   include_tasks: tasks/user-setup.yml
+#   vars:
+#     username: deploy
+#     user_groups: [docker, wheel]
+
+- name: Create user
+  user: ${vars.username}
+  state: present
+  groups: ${vars.user_groups | default([])}
+  create_home: true
+  sudo: true
+
+- name: Create .ssh directory
+  file: /home/${vars.username}/.ssh
+  state: directory
+  owner: ${vars.username}
+  group: ${vars.username}
+  mode: "0700"
+  sudo: true
+
+- name: Set user shell
+  command: chsh -s ${vars.user_shell | default('/bin/bash')} ${vars.username}
+  sudo: true

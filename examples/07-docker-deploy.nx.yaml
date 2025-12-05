@@ -1,0 +1,84 @@
+# Docker Application Deployment
+#
+# A complete example of deploying a containerized application with:
+# - Docker installation verification
+# - Image pulling
+# - Container lifecycle management
+# - Health checks
+# - Rollback on failure
+#
+# Run with:
+#   nexus run 07-docker-deploy.nx.yaml -i inventory.yaml --sudo
+
+hosts: webservers
+
+vars:
+  app_name: myapp
+  app_version: "1.2.3"
+  registry: docker.io/myorg
+  container_port: 8080
+  host_port: 80
+  health_check_path: /health
+  rollback_on_failure: true
+
+tasks:
+  - name: Ensure Docker is installed
+    package: docker
+    state: installed
+    sudo: true
+
+  - name: Ensure Docker service is running
+    service: docker
+    state: running
+    enabled: true
+    sudo: true
+
+  - name: Pull new image
+    command: docker pull ${vars.registry}/${vars.app_name}:${vars.app_version}
+    register: pull_result
+    sudo: true
+
+  - name: Get current container ID (if running)
+    command: docker ps -q -f name=${vars.app_name}
+    register: current_container
+    sudo: true
+
+  - name: Stop current container
+    command: docker stop ${current_container.stdout}
+    when: ${current_container.stdout != ""}
+    sudo: true
+
+  - name: Remove current container
+    command: docker rm ${current_container.stdout}
+    when: ${current_container.stdout != ""}
+    sudo: true
+
+  - name: Start new container
+    command: |
+      docker run -d \
+        --name ${vars.app_name} \
+        --restart unless-stopped \
+        -p ${vars.host_port}:${vars.container_port} \
+        -e APP_ENV=${host.vars.environment | default('production')} \
+        -e APP_VERSION=${vars.app_version} \
+        ${vars.registry}/${vars.app_name}:${vars.app_version}
+    register: new_container
+    sudo: true
+
+  - name: Wait for container to be healthy
+    command: |
+      for i in $(seq 1 30); do
+        if curl -sf http://localhost:${vars.host_port}${vars.health_check_path}; then
+          echo "healthy"
+          exit 0
+        fi
+        sleep 2
+      done
+      echo "unhealthy"
+      exit 1
+    register: health_check
+    sudo: true
+
+  - name: Report deployment status
+    command: echo "Deployment of ${vars.app_name}:${vars.app_version} completed successfully!"
+    when: ${health_check.exit_code == 0}

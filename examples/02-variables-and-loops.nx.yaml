@@ -1,0 +1,30 @@
+# Variables and Loops
+#
+# Demonstrates how to use variables, loops, and conditionals in Nexus.
+# Run with:
+#   nexus run 02-variables-and-loops.nx.yaml -i inventory.yaml
+
+hosts: all
+
+vars:
+  greeting: "Hello"
+  packages_to_check:
+    - curl
+    - wget
+    - vim
+  enable_debug: true
+
+tasks:
+  - name: Print a greeting with variables
+    command: echo "${vars.greeting} from ${host.name}!"
+
+  - name: Check if packages are installed
+    command: which ${item} || echo "${item} not found"
+    loop: ${vars.packages_to_check}
+
+  - name: Debug output (only runs when enable_debug is true)
+    command: echo "Debug mode is enabled. Host address is ${host.address}"
+    when: ${vars.enable_debug}
+
+  - name: Show host-specific variables
+    command: echo "Environment - ${host.vars.environment | default('not set')}"

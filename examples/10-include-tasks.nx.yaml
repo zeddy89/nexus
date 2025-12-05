@@ -1,0 +1,31 @@
+# Include Tasks
+#
+# Demonstrates how to include reusable task files.
+# Task files in the ./tasks directory can be included in any playbook.
+#
+# Run with:
+#   nexus run 10-include-tasks.nx.yaml -i inventory.yaml --sudo
+
+hosts: all
+
+vars:
+  deploy_user: deploy
+  deploy_groups:
+    - docker
+    - wheel
+
+tasks:
+  - name: Run common setup
+    include_tasks: tasks/common.yml
+    vars:
+      hostname: "${host.name}-configured"
+
+  - name: Setup deployment user
+    include_tasks: tasks/user-setup.yml
+    vars:
+      username: ${vars.deploy_user}
+      user_groups: ${vars.deploy_groups}
+      user_shell: /bin/bash
+
+  - name: Verify setup completed
+    command: echo "Setup completed for ${host.name}!"

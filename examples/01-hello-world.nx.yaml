@@ -1,0 +1,20 @@
+# Hello World - Your First Nexus Playbook
+#
+# This is the simplest possible Nexus playbook to help you get started.
+# Run it with:
+#   nexus run 01-hello-world.nx.yaml -i inventory.yaml
+#
+# Or in check mode (dry run):
+#   nexus run 01-hello-world.nx.yaml -i inventory.yaml --check
+
+hosts: all
+
+tasks:
+  - name: Say hello
+    command: echo "Hello from Nexus on ${host.name}!"
+
+  - name: Show current date
+    command: date
+
+  - name: Show system info
+    command: uname -a

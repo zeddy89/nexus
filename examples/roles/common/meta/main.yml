@@ -1,0 +1,16 @@
+# Common role metadata
+dependencies: []
+
+galaxy_info:
+  description: Common base setup for all servers
+  author: Nexus Team
+  license: MIT
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "20.04"
+        - "22.04"
+    - name: Debian
+      versions:
+        - "11"
+        - "12"

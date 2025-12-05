@@ -1,0 +1,8 @@
+# Default variables for webserver role
+nginx_user: www-data
+nginx_group: www-data
+nginx_port: 80
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+web_root: /var/www/html
+server_name: localhost

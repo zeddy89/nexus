@@ -1,0 +1,46 @@
+# Handlers
+#
+# Demonstrates handler notifications - tasks that run only when notified.
+# Handlers are perfect for restarting services after configuration changes.
+#
+# Run with:
+#   nexus run 04-handlers.nx.yaml -i inventory.yaml --sudo
+
+hosts: webservers
+
+vars:
+  config_dir: /etc/myapp
+  config_file: /etc/myapp/config.ini
+
+tasks:
+  - name: Ensure config directory exists
+    file: ${vars.config_dir}
+    state: directory
+    mode: "0755"
+    sudo: true
+
+  - name: Deploy application config
+    file: ${vars.config_file}
+    content: |
+      [application]
+      name = myapp
+      environment = production
+      log_level = info
+
+      [server]
+      host = 0.0.0.0
+      port = 8080
+    mode: "0644"
+    sudo: true
+    notify: restart_app
+
+  - name: Ensure app is running
+    command: echo "Application would be started here"
+    notify: verify_health
+
+handlers:
+  - name: restart_app
+    command: echo "Restarting application..."
+
+  - name: verify_health
+    command: echo "Verifying application health..."

@@ -1,0 +1,28 @@
+# Reusable Common Tasks
+#
+# These tasks can be included in playbooks using:
+#   include_tasks: tasks/common.yml
+#
+# With variables:
+#   include_tasks: tasks/common.yml
+#   vars:
+#     hostname: myserver
+
+- name: Update system packages
+  command: apt-get update
+  sudo: true
+
+- name: Install common tools
+  package: ${item}
+  state: installed
+  sudo: true
+  loop:
+    - vim
+    - curl
+    - wget
+    - htop
+
+- name: Configure hostname
+  command: hostnamectl set-hostname ${vars.hostname | default(host.name)}
+  sudo: true
+  when: ${vars.hostname is defined}

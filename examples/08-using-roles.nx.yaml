@@ -1,0 +1,82 @@
+# Using Roles
+#
+# Roles are reusable collections of tasks, handlers, variables, and templates.
+# This example demonstrates how to use the roles in the ./roles directory.
+#
+# Role structure:
+#   roles/
+#     common/
+#       tasks/main.yml      # Tasks to execute
+#       defaults/main.yml   # Default variables
+#       meta/main.yml       # Role metadata and dependencies
+#     webserver/
+#       tasks/main.yml
+#       defaults/main.yml
+#       handlers/main.yml   # Handlers for the role
+#       templates/          # Jinja2 templates
+#       meta/main.yml
+#
+# Run with:
+#   nexus run 08-using-roles.nx.yaml -i inventory.yaml --sudo
+
+hosts: webservers
+
+vars:
+  app_name: myapp
+  environment: production
+
+# Pre-tasks run before roles
+pre_tasks:
+  - name: Check connectivity
+    command: echo "Starting deployment on ${host.name}"
+    tags:
+      - always
+
+# Roles to execute (in order, with dependencies resolved)
+roles:
+  # Simple role reference
+  - common
+
+  # Role with variable overrides
+  - role: webserver
+    vars:
+      nginx_port: 8080
+      server_name: "${vars.app_name}.example.com"
+      web_root: "/var/www/${vars.app_name}"
+    tags:
+      - webserver
+      - nginx
+
+# Regular tasks run after roles
+tasks:
+  - name: Deploy application index page
+    file: "/var/www/${vars.app_name}/index.html"
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head><title>${vars.app_name}</title></head>
+      <body>
+        <h1>Welcome to ${vars.app_name}</h1>
+        <p>Environment: ${vars.environment}</p>
+        <p>Deployed by Nexus</p>
+      </body>
+      </html>
+    owner: www-data
+    group: www-data
+    mode: "0644"
+    sudo: true
+    tags:
+      - deploy
+
+# Post-tasks run after everything
+post_tasks:
+  - name: Verify nginx is running
+    command: systemctl is-active nginx
+    sudo: true
+    tags:
+      - verify
+
+  - name: Report deployment status
+    command: echo "Deployment complete on ${host.name}!"
+    tags:
+      - always
