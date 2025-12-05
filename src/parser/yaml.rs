@@ -933,6 +933,38 @@ fn parse_module_call(
         return parse_shell_module(shell_value, module, source_file);
     }
 
+    if let Some(log_value) = module.get("log") {
+        return parse_log_module(log_value);
+    }
+
+    if let Some(set_value) = module.get("set") {
+        return parse_set_module(set_value);
+    }
+
+    if let Some(fail_value) = module.get("fail") {
+        return parse_fail_module(fail_value);
+    }
+
+    if let Some(assert_value) = module.get("assert") {
+        return parse_assert_module(assert_value, module);
+    }
+
+    if let Some(raw_value) = module.get("raw") {
+        return parse_raw_module(raw_value);
+    }
+
+    if let Some(git_value) = module.get("git") {
+        return parse_git_module(git_value, module);
+    }
+
+    if let Some(http_value) = module.get("http") {
+        return parse_http_module(http_value, module);
+    }
+
+    if let Some(group_value) = module.get("group") {
+        return parse_group_module(group_value, module);
+    }
+
     // Unknown module - provide helpful error
     let unknown_key = module_keys[0];
     let _suggestion = suggest_module(unknown_key);
@@ -1340,6 +1372,202 @@ fn parse_shell_module(
         creates,
         removes,
     })
+}
+
+fn parse_log_module(value: &YamlValue) -> Result<ModuleCall, NexusError> {
+    let message = yaml_to_expression(value)?;
+    Ok(ModuleCall::Log { message })
+}
+
+fn parse_set_module(value: &YamlValue) -> Result<ModuleCall, NexusError> {
+    // Handle "set: varname = value" format
+    if let YamlValue::String(s) = value {
+        if let Some((name, val)) = s.split_once('=') {
+            let name = name.trim().to_string();
+            let value = Expression::String(val.trim().to_string());
+            return Ok(ModuleCall::Set { name, value });
+        }
+    }
+    // Handle mapping form
+    if let YamlValue::Mapping(map) = value {
+        if let Some((YamlValue::String(name), val)) = map.iter().next() {
+            let value = yaml_to_expression(val)?;
+            return Ok(ModuleCall::Set {
+                name: name.clone(),
+                value,
+            });
+        }
+    }
+    Err(NexusError::Parse(Box::new(ParseError {
+        kind: ParseErrorKind::InvalidValue,
+        message: "set module requires 'name = value' or mapping format".to_string(),
+        file: None,
+        line: None,
+        column: None,
+        suggestion: Some("Use 'set: varname = value' or 'set: { varname: value }'".to_string()),
+    })))
+}
+
+fn parse_fail_module(value: &YamlValue) -> Result<ModuleCall, NexusError> {
+    let message = yaml_to_expression(value)?;
+    Ok(ModuleCall::Fail { message })
+}
+
+fn parse_assert_module(
+    value: &YamlValue,
+    module: &HashMap<String, YamlValue>,
+) -> Result<ModuleCall, NexusError> {
+    let condition = yaml_to_expression(value)?;
+    let message = module.get("msg").map(yaml_to_expression).transpose()?;
+    Ok(ModuleCall::Assert { condition, message })
+}
+
+fn parse_raw_module(value: &YamlValue) -> Result<ModuleCall, NexusError> {
+    let command = yaml_to_expression(value)?;
+    Ok(ModuleCall::Raw { command })
+}
+
+fn parse_git_module(
+    value: &YamlValue,
+    module: &HashMap<String, YamlValue>,
+) -> Result<ModuleCall, NexusError> {
+    // Handle "git: clone repo dest" format
+    let (repo, dest) = if let YamlValue::String(s) = value {
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.len() >= 3 && parts[0] == "clone" {
+            (
+                Expression::String(parts[1].to_string()),
+                Expression::String(parts[2].to_string()),
+            )
+        } else {
+            return Err(NexusError::Parse(Box::new(ParseError {
+                kind: ParseErrorKind::InvalidValue,
+                message: "git module requires 'clone repo dest' format".to_string(),
+                file: None,
+                line: None,
+                column: None,
+                suggestion: Some("Use 'git: clone https://repo.git /path/to/dest'".to_string()),
+            })));
+        }
+    } else {
+        let repo = module
+            .get("repo")
+            .map(yaml_to_expression)
+            .transpose()?
+            .ok_or_else(|| {
+                NexusError::Parse(Box::new(ParseError {
+                    kind: ParseErrorKind::MissingField,
+                    message: "git module requires 'repo' field".to_string(),
+                    file: None,
+                    line: None,
+                    column: None,
+                    suggestion: None,
+                }))
+            })?;
+        let dest = module
+            .get("dest")
+            .map(yaml_to_expression)
+            .transpose()?
+            .ok_or_else(|| {
+                NexusError::Parse(Box::new(ParseError {
+                    kind: ParseErrorKind::MissingField,
+                    message: "git module requires 'dest' field".to_string(),
+                    file: None,
+                    line: None,
+                    column: None,
+                    suggestion: None,
+                }))
+            })?;
+        (repo, dest)
+    };
+
+    let version = module.get("version").map(yaml_to_expression).transpose()?;
+    let force = module.get("force").and_then(|v| v.as_bool());
+
+    Ok(ModuleCall::Git {
+        repo,
+        dest,
+        version,
+        force,
+    })
+}
+
+fn parse_http_module(
+    value: &YamlValue,
+    module: &HashMap<String, YamlValue>,
+) -> Result<ModuleCall, NexusError> {
+    // Handle "http: get url" format
+    let (method, url) = if let YamlValue::String(s) = value {
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.len() >= 2 {
+            (Some(parts[0].to_uppercase()), Expression::String(parts[1].to_string()))
+        } else {
+            (None, Expression::String(parts[0].to_string()))
+        }
+    } else {
+        let url = module
+            .get("url")
+            .map(yaml_to_expression)
+            .transpose()?
+            .ok_or_else(|| {
+                NexusError::Parse(Box::new(ParseError {
+                    kind: ParseErrorKind::MissingField,
+                    message: "http module requires 'url' field".to_string(),
+                    file: None,
+                    line: None,
+                    column: None,
+                    suggestion: None,
+                }))
+            })?;
+        let method = module.get("method").and_then(|v| v.as_str()).map(|s| s.to_uppercase());
+        (method, url)
+    };
+
+    let body = module.get("body").map(yaml_to_expression).transpose()?;
+    let headers = module.get("headers").map(yaml_to_expression).transpose()?;
+
+    Ok(ModuleCall::Http {
+        url,
+        method,
+        body,
+        headers,
+    })
+}
+
+fn parse_group_module(
+    value: &YamlValue,
+    module: &HashMap<String, YamlValue>,
+) -> Result<ModuleCall, NexusError> {
+    // Handle "group: create groupname" format
+    let (name, state) = if let YamlValue::String(s) = value {
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let state = match parts[0] {
+                "create" => UserState::Present,
+                "remove" => UserState::Absent,
+                _ => UserState::Present,
+            };
+            (Expression::String(parts[1].to_string()), state)
+        } else {
+            (Expression::String(parts[0].to_string()), UserState::Present)
+        }
+    } else {
+        let name = yaml_to_expression(value)?;
+        let state = module
+            .get("state")
+            .and_then(|v| v.as_str())
+            .map(|s| match s {
+                "present" => UserState::Present,
+                "absent" => UserState::Absent,
+                _ => UserState::Present,
+            })
+            .unwrap_or(UserState::Present);
+        (name, state)
+    };
+
+    let gid = module.get("gid").map(yaml_to_expression).transpose()?;
+
+    Ok(ModuleCall::Group { name, state, gid })
 }
 
 pub(crate) fn yaml_to_expression(value: &YamlValue) -> Result<Expression, NexusError> {

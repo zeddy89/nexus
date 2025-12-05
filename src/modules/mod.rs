@@ -431,6 +431,140 @@ impl ModuleExecutor {
 
                 Ok(output)
             }
+
+            ModuleCall::Log { message } => {
+                let msg = evaluate_expression(message, ctx)?;
+                Ok(TaskOutput::success().with_stdout(msg.to_string()))
+            }
+
+            ModuleCall::Set { name, value } => {
+                let val = evaluate_expression(value, ctx)?;
+                ctx.set_var(name, val.clone());
+                Ok(TaskOutput::success().with_stdout(format!("Set {} = {}", name, val)))
+            }
+
+            ModuleCall::Fail { message } => {
+                let msg = evaluate_expression(message, ctx)?;
+                Err(NexusError::Runtime {
+                    function: Some("fail".to_string()),
+                    message: msg.to_string(),
+                    suggestion: None,
+                })
+            }
+
+            ModuleCall::Assert { condition, message } => {
+                use crate::parser::ast::Value;
+                let cond = evaluate_expression(condition, ctx)?;
+                let is_true = match &cond {
+                    Value::Bool(b) => *b,
+                    Value::String(s) => !s.is_empty() && s != "false" && s != "0",
+                    Value::Int(i) => *i != 0,
+                    Value::Null => false,
+                    _ => true,
+                };
+
+                if is_true {
+                    Ok(TaskOutput::success().with_stdout("Assertion passed"))
+                } else {
+                    let msg = if let Some(m) = message {
+                        evaluate_expression(m, ctx)?.to_string()
+                    } else {
+                        "Assertion failed".to_string()
+                    };
+                    Err(NexusError::Runtime {
+                        function: Some("assert".to_string()),
+                        message: msg,
+                        suggestion: None,
+                    })
+                }
+            }
+
+            ModuleCall::Raw { command } => {
+                let cmd = evaluate_expression(command, ctx)?;
+                // Raw executes without shell wrapping
+                self.command
+                    .execute_with_params(ctx, conn.as_connection(), &cmd.to_string(), None, None)
+                    .await
+            }
+
+            ModuleCall::Git {
+                repo,
+                dest,
+                version,
+                force,
+            } => {
+                let repo_val = evaluate_expression(repo, ctx)?;
+                let dest_val = evaluate_expression(dest, ctx)?;
+                let version_val = version
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+
+                // Build git clone command
+                let mut cmd = format!("git clone {}", repo_val);
+                if let Some(ref v) = version_val {
+                    cmd.push_str(&format!(" --branch {}", v));
+                }
+                if force.unwrap_or(false) {
+                    // For force, remove dest first then clone
+                    cmd = format!("rm -rf {} && {}", dest_val, cmd);
+                }
+                cmd.push_str(&format!(" {}", dest_val));
+
+                self.shell
+                    .execute_with_params(ctx, conn.as_connection(), &cmd, None, None, None)
+                    .await
+            }
+
+            ModuleCall::Http {
+                url,
+                method,
+                body,
+                headers: _,
+            } => {
+                let url_val = evaluate_expression(url, ctx)?;
+                let body_val = body
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+
+                // Build curl command
+                let method_str = method.as_deref().unwrap_or("GET");
+                let mut cmd = format!("curl -s -X {} '{}'", method_str, url_val);
+                if let Some(ref b) = body_val {
+                    cmd.push_str(&format!(" -d '{}'", b));
+                }
+
+                self.shell
+                    .execute_with_params(ctx, conn.as_connection(), &cmd, None, None, None)
+                    .await
+            }
+
+            ModuleCall::Group { name, state, gid } => {
+                let name_val = evaluate_expression(name, ctx)?;
+                let gid_val = gid
+                    .as_ref()
+                    .map(|e| evaluate_expression(e, ctx))
+                    .transpose()?;
+
+                let cmd = match state {
+                    crate::parser::ast::UserState::Present => {
+                        let mut c = format!("groupadd {}", name_val);
+                        if let Some(ref g) = gid_val {
+                            c.push_str(&format!(" -g {}", g));
+                        }
+                        // Add || true to handle already exists case
+                        format!("{} 2>/dev/null || grep -q '^{}:' /etc/group", c, name_val)
+                    }
+                    crate::parser::ast::UserState::Absent => {
+                        format!("groupdel {} 2>/dev/null || true", name_val)
+                    }
+                };
+
+                self.shell
+                    .execute_with_params(ctx, conn.as_connection(), &cmd, None, None, None)
+                    .await
+            }
         }
     }
 }

@@ -375,6 +375,39 @@ pub enum ModuleCall {
         creates: Option<Expression>,
         removes: Option<Expression>,
     },
+    /// Log/debug output
+    Log { message: Expression },
+    /// Set variable
+    Set { name: String, value: Expression },
+    /// Fail with message
+    Fail { message: Expression },
+    /// Assert condition
+    Assert {
+        condition: Expression,
+        message: Option<Expression>,
+    },
+    /// Raw command (no shell processing)
+    Raw { command: Expression },
+    /// Git operations
+    Git {
+        repo: Expression,
+        dest: Expression,
+        version: Option<Expression>,
+        force: Option<bool>,
+    },
+    /// HTTP request
+    Http {
+        url: Expression,
+        method: Option<String>,
+        body: Option<Expression>,
+        headers: Option<Expression>,
+    },
+    /// Group management
+    Group {
+        name: Expression,
+        state: UserState,
+        gid: Option<Expression>,
+    },
 }
 
 impl ModuleCall {
@@ -390,6 +423,14 @@ impl ModuleCall {
             ModuleCall::Template { .. } => "template",
             ModuleCall::Facts { .. } => "facts",
             ModuleCall::Shell { .. } => "shell",
+            ModuleCall::Log { .. } => "log",
+            ModuleCall::Set { .. } => "set",
+            ModuleCall::Fail { .. } => "fail",
+            ModuleCall::Assert { .. } => "assert",
+            ModuleCall::Raw { .. } => "raw",
+            ModuleCall::Git { .. } => "git",
+            ModuleCall::Http { .. } => "http",
+            ModuleCall::Group { .. } => "group",
         }
     }
 }
