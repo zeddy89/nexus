@@ -418,9 +418,14 @@ fn convert_package_module(args: &Value) -> Result<ModuleConversionResult, String
     // This is a query operation, convert to shell command
     if let Some(list_type) = get_str(args, "list") {
         return Ok(ModuleConversionResult {
-            action_line: format!("shell: dnf list {} -q 2>/dev/null || yum list {} -q 2>/dev/null", list_type, list_type),
+            action_line: format!(
+                "shell: dnf list {} -q 2>/dev/null || yum list {} -q 2>/dev/null",
+                list_type, list_type
+            ),
             additional_lines: vec![],
-            warnings: vec!["Converted package list to shell command - output format may differ".to_string()],
+            warnings: vec![
+                "Converted package list to shell command - output format may differ".to_string(),
+            ],
         });
     }
 
@@ -504,9 +509,13 @@ fn convert_service_module(args: &Value) -> Result<ModuleConversionResult, String
             format!("service: stop {}", name)
         }
         (Some("stopped"), None) => format!("service: stop {}", name),
-        (Some("restarted"), Some(true)) => format!("service: enable {} && service: restart {}", name, name),
+        (Some("restarted"), Some(true)) => {
+            format!("service: enable {} && service: restart {}", name, name)
+        }
         (Some("restarted"), _) => format!("service: restart {}", name),
-        (Some("reloaded"), Some(true)) => format!("service: enable {} && service: reload {}", name, name),
+        (Some("reloaded"), Some(true)) => {
+            format!("service: enable {} && service: reload {}", name, name)
+        }
         (Some("reloaded"), _) => format!("service: reload {}", name),
         // No state specified, only enabled
         (None, Some(true)) => format!("service: enable {}", name),
@@ -694,7 +703,10 @@ fn convert_lineinfile_module(args: &Value) -> Result<ModuleConversionResult, Str
         if let Some(regexp) = regexp {
             if backrefs {
                 // When backrefs is true, the line can contain \1, \2, etc. for capture groups
-                format!("file: line {} \"{}\" --regexp \"{}\" --backrefs", path, line, regexp)
+                format!(
+                    "file: line {} \"{}\" --regexp \"{}\" --backrefs",
+                    path, line, regexp
+                )
             } else {
                 format!("file: line {} \"{}\" --regexp \"{}\"", path, line, regexp)
             }
@@ -1315,7 +1327,9 @@ fn convert_add_host_module(args: &Value) -> Result<ModuleConversionResult, Strin
     Ok(ModuleConversionResult {
         action_line: comment_lines[0].clone(),
         additional_lines: comment_lines[1..].to_vec(),
-        warnings: vec!["add_host is not supported - dynamic inventory needs manual conversion".to_string()],
+        warnings: vec![
+            "add_host is not supported - dynamic inventory needs manual conversion".to_string(),
+        ],
     })
 }
 
@@ -1325,7 +1339,9 @@ fn convert_group_by_module(args: &Value) -> Result<ModuleConversionResult, Strin
     Ok(ModuleConversionResult {
         action_line: "# TODO: group_by not supported in Nexus".to_string(),
         additional_lines: vec![format!("# Original: group_by key={}", key)],
-        warnings: vec!["group_by is not supported - dynamic grouping needs manual conversion".to_string()],
+        warnings: vec![
+            "group_by is not supported - dynamic grouping needs manual conversion".to_string(),
+        ],
     })
 }
 
@@ -1505,7 +1521,10 @@ mod tests {
         let mapper = ModuleMapper::new();
         let args: Value = from_str("prompt: \"Press any key to continue\"").unwrap();
         let result = mapper.convert("pause", &args).unwrap();
-        assert_eq!(result.action_line, "pause: prompt \"Press any key to continue\"");
+        assert_eq!(
+            result.action_line,
+            "pause: prompt \"Press any key to continue\""
+        );
     }
 
     #[test]
@@ -1547,7 +1566,8 @@ mod tests {
     #[test]
     fn test_expect_unsupported() {
         let mapper = ModuleMapper::new();
-        let args: Value = from_str("command: passwd user\nresponses:\n  \"(?i)password\": \"secret\"").unwrap();
+        let args: Value =
+            from_str("command: passwd user\nresponses:\n  \"(?i)password\": \"secret\"").unwrap();
         let result = mapper.convert("expect", &args).unwrap();
         assert!(result.action_line.contains("TODO"));
         assert!(result.warnings.len() > 0);
@@ -1559,16 +1579,41 @@ mod tests {
         let mapper = ModuleMapper::new();
 
         // Test that all new modules are registered
-        assert!(mapper.is_supported("meta"), "meta module should be supported");
-        assert!(mapper.is_supported("wait_for"), "wait_for module should be supported");
-        assert!(mapper.is_supported("pause"), "pause module should be supported");
-        assert!(mapper.is_supported("add_host"), "add_host module should be supported");
-        assert!(mapper.is_supported("group_by"), "group_by module should be supported");
-        assert!(mapper.is_supported("script"), "script module should be supported");
-        assert!(mapper.is_supported("expect"), "expect module should be supported");
+        assert!(
+            mapper.is_supported("meta"),
+            "meta module should be supported"
+        );
+        assert!(
+            mapper.is_supported("wait_for"),
+            "wait_for module should be supported"
+        );
+        assert!(
+            mapper.is_supported("pause"),
+            "pause module should be supported"
+        );
+        assert!(
+            mapper.is_supported("add_host"),
+            "add_host module should be supported"
+        );
+        assert!(
+            mapper.is_supported("group_by"),
+            "group_by module should be supported"
+        );
+        assert!(
+            mapper.is_supported("script"),
+            "script module should be supported"
+        );
+        assert!(
+            mapper.is_supported("expect"),
+            "expect module should be supported"
+        );
 
         // Verify the mapper returns the correct count
         let supported = mapper.supported_modules();
-        assert!(supported.len() >= 34, "Should have at least 34 supported modules, got {}", supported.len());
+        assert!(
+            supported.len() >= 34,
+            "Should have at least 34 supported modules, got {}",
+            supported.len()
+        );
     }
 }

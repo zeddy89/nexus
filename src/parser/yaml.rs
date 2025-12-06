@@ -1500,7 +1500,10 @@ fn parse_http_module(
     let (method, url) = if let YamlValue::String(s) = value {
         let parts: Vec<&str> = s.split_whitespace().collect();
         if parts.len() >= 2 {
-            (Some(parts[0].to_uppercase()), Expression::String(parts[1].to_string()))
+            (
+                Some(parts[0].to_uppercase()),
+                Expression::String(parts[1].to_string()),
+            )
         } else {
             (None, Expression::String(parts[0].to_string()))
         }
@@ -1519,7 +1522,10 @@ fn parse_http_module(
                     suggestion: None,
                 }))
             })?;
-        let method = module.get("method").and_then(|v| v.as_str()).map(|s| s.to_uppercase());
+        let method = module
+            .get("method")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_uppercase());
         (method, url)
     };
 

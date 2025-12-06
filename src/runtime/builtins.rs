@@ -649,7 +649,8 @@ fn builtin_iif(args: Vec<Value>) -> Result<Value, NexusError> {
     if args.len() < 3 {
         return Err(NexusError::Runtime {
             function: Some("iif".to_string()),
-            message: "iif requires 3 arguments: iif(condition, true_value, false_value)".to_string(),
+            message: "iif requires 3 arguments: iif(condition, true_value, false_value)"
+                .to_string(),
             suggestion: Some("Example: iif(x > 0, 'positive', 'non-positive')".to_string()),
         });
     }

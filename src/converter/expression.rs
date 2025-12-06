@@ -70,8 +70,14 @@ impl ExpressionConverter {
             "regex_replace",
             FilterConversion::MethodWithArgs("regex_replace"),
         );
-        filter_map.insert("selectattr", FilterConversion::MethodWithArgs("select_attr"));
-        filter_map.insert("rejectattr", FilterConversion::MethodWithArgs("reject_attr"));
+        filter_map.insert(
+            "selectattr",
+            FilterConversion::MethodWithArgs("select_attr"),
+        );
+        filter_map.insert(
+            "rejectattr",
+            FilterConversion::MethodWithArgs("reject_attr"),
+        );
         filter_map.insert("map", FilterConversion::MethodWithArgs("map"));
         filter_map.insert("select", FilterConversion::MethodWithArgs("select"));
         filter_map.insert("reject", FilterConversion::MethodWithArgs("reject"));
@@ -230,9 +236,7 @@ impl ExpressionConverter {
         // Handle "is defined" / "is not defined"
         // Match variable paths like: my_var, result.stdout, foo.bar.baz
         let defined_re = Regex::new(r"([\w.]+)\s+is\s+defined").unwrap();
-        output = defined_re
-            .replace_all(&output, "$1 != null")
-            .to_string();
+        output = defined_re.replace_all(&output, "$1 != null").to_string();
 
         let not_defined_re = Regex::new(r"([\w.]+)\s+is\s+not\s+defined").unwrap();
         output = not_defined_re
@@ -281,9 +285,7 @@ impl ExpressionConverter {
 
         // Handle "is sameas(value)"
         let sameas_re = Regex::new(r"([\w.]+)\s+is\s+sameas\((.+?)\)").unwrap();
-        output = sameas_re
-            .replace_all(&output, "$1 === $2")
-            .to_string();
+        output = sameas_re.replace_all(&output, "$1 === $2").to_string();
 
         // Handle "is search" and "is match"
         // Note: Ansible's "is search" does regex matching, not substring matching
@@ -332,7 +334,11 @@ impl ExpressionConverter {
         let needs_wrap = !already_wrapped
             && !output.starts_with('"')
             && !output.starts_with('\'')
-            && !output.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+            && !output
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
             && !output.eq_ignore_ascii_case("true")
             && !output.eq_ignore_ascii_case("false");
 

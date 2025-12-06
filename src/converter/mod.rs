@@ -339,7 +339,9 @@ impl Converter {
                     }
                     serde_yaml::Value::Mapping(role_map) => {
                         // Complex role with parameters
-                        if let Some(name_val) = role_map.get(serde_yaml::Value::String("role".to_string())) {
+                        if let Some(name_val) =
+                            role_map.get(serde_yaml::Value::String("role".to_string()))
+                        {
                             if let Some(role_name) = name_val.as_str() {
                                 output.push_str(&format!("  - role: {}\n", role_name));
 
@@ -347,13 +349,21 @@ impl Converter {
                                 for (key, value) in role_map {
                                     if let Some(key_str) = key.as_str() {
                                         if key_str != "role" {
-                                            let value_str = serde_yaml::to_string(value).unwrap_or_default().trim().to_string();
-                                            output.push_str(&format!("    {}: {}\n", key_str, value_str));
+                                            let value_str = serde_yaml::to_string(value)
+                                                .unwrap_or_default()
+                                                .trim()
+                                                .to_string();
+                                            output.push_str(&format!(
+                                                "    {}: {}\n",
+                                                key_str, value_str
+                                            ));
                                         }
                                     }
                                 }
                             }
-                        } else if let Some(name_val) = role_map.get(serde_yaml::Value::String("name".to_string())) {
+                        } else if let Some(name_val) =
+                            role_map.get(serde_yaml::Value::String("name".to_string()))
+                        {
                             // Alternative format with 'name' instead of 'role'
                             if let Some(role_name) = name_val.as_str() {
                                 output.push_str(&format!("  - role: {}\n", role_name));
@@ -361,8 +371,14 @@ impl Converter {
                                 for (key, value) in role_map {
                                     if let Some(key_str) = key.as_str() {
                                         if key_str != "name" {
-                                            let value_str = serde_yaml::to_string(value).unwrap_or_default().trim().to_string();
-                                            output.push_str(&format!("    {}: {}\n", key_str, value_str));
+                                            let value_str = serde_yaml::to_string(value)
+                                                .unwrap_or_default()
+                                                .trim()
+                                                .to_string();
+                                            output.push_str(&format!(
+                                                "    {}: {}\n",
+                                                key_str, value_str
+                                            ));
                                         }
                                     }
                                 }
@@ -370,18 +386,24 @@ impl Converter {
                         } else {
                             // Unknown role format - output as-is with warning
                             let role_yaml = serde_yaml::to_string(role).unwrap_or_default();
-                            output.push_str(&format!("  # TODO: Complex role format\n  # {}\n", role_yaml.trim().replace('\n', "\n  # ")));
+                            output.push_str(&format!(
+                                "  # TODO: Complex role format\n  # {}\n",
+                                role_yaml.trim().replace('\n', "\n  # ")
+                            ));
                             issues.push(ConversionIssue::warning(
-                                "Complex role format may need manual review".to_string()
+                                "Complex role format may need manual review".to_string(),
                             ));
                         }
                     }
                     _ => {
                         // Unknown format
                         let role_yaml = serde_yaml::to_string(role).unwrap_or_default();
-                        output.push_str(&format!("  # TODO: Unknown role format\n  # {}\n", role_yaml.trim()));
+                        output.push_str(&format!(
+                            "  # TODO: Unknown role format\n  # {}\n",
+                            role_yaml.trim()
+                        ));
                         issues.push(ConversionIssue::warning(
-                            "Unknown role format - manual conversion required".to_string()
+                            "Unknown role format - manual conversion required".to_string(),
                         ));
                     }
                 }
@@ -621,16 +643,24 @@ impl Converter {
             let dict_str = match with_dict {
                 serde_yaml::Value::String(s) => {
                     let converted = self.expression_converter.convert_string(s);
-                    format!("${{{{ {} | dict2items }}}}", converted.output.trim_matches(|c| c == '$' || c == '{' || c == '}'))
+                    format!(
+                        "${{{{ {} | dict2items }}}}",
+                        converted
+                            .output
+                            .trim_matches(|c| c == '$' || c == '{' || c == '}')
+                    )
                 }
                 other => {
-                    let yaml_str = serde_yaml::to_string(other).unwrap_or_default().trim().to_string();
+                    let yaml_str = serde_yaml::to_string(other)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
                     format!("${{{{ {} | dict2items }}}}", yaml_str)
                 }
             };
             output.push_str(&format!("    loop: {}\n", dict_str));
             issues.push(ConversionIssue::warning(
-                "with_dict converted to loop with dict2items filter - verify behavior".to_string()
+                "with_dict converted to loop with dict2items filter - verify behavior".to_string(),
             ));
             needs_review = true;
         } else if let Some(with_together) = &task.with_together {
@@ -642,9 +672,15 @@ impl Converter {
                         .map(|v| match v {
                             serde_yaml::Value::String(s) => {
                                 let converted = self.expression_converter.convert_string(s);
-                                converted.output.trim_matches(|c| c == '$' || c == '{' || c == '}').to_string()
+                                converted
+                                    .output
+                                    .trim_matches(|c| c == '$' || c == '{' || c == '}')
+                                    .to_string()
                             }
-                            other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                            other => serde_yaml::to_string(other)
+                                .unwrap_or_default()
+                                .trim()
+                                .to_string(),
                         })
                         .collect();
                     format!("${{{{ zip({}) }}}}", items.join(", "))
@@ -655,7 +691,7 @@ impl Converter {
             };
             output.push_str(&format!("    loop: {}\n", together_str));
             issues.push(ConversionIssue::warning(
-                "with_together converted to loop with zip - verify behavior".to_string()
+                "with_together converted to loop with zip - verify behavior".to_string(),
             ));
             needs_review = true;
         } else if let Some(with_nested) = &task.with_nested {
@@ -695,7 +731,7 @@ impl Converter {
             };
             output.push_str(&format!("    loop: {}\n", sequence_str));
             issues.push(ConversionIssue::warning(
-                "with_sequence converted to range - verify parameters".to_string()
+                "with_sequence converted to range - verify parameters".to_string(),
             ));
             needs_review = true;
         } else if let Some(with_fileglob) = &task.with_fileglob {
@@ -715,15 +751,18 @@ impl Converter {
             };
             output.push_str(&format!("    loop: {}\n", fileglob_str));
             issues.push(ConversionIssue::warning(
-                "with_fileglob converted to fileglob lookup - verify path resolution".to_string()
+                "with_fileglob converted to fileglob lookup - verify path resolution".to_string(),
             ));
             needs_review = true;
         } else if let Some(with_subelements) = &task.with_subelements {
             // with_subelements is complex - flag for manual conversion
             output.push_str("    # TODO: with_subelements requires manual conversion\n");
-            output.push_str(&format!("    # loop: # with_subelements: {:?}\n", with_subelements));
+            output.push_str(&format!(
+                "    # loop: # with_subelements: {:?}\n",
+                with_subelements
+            ));
             issues.push(ConversionIssue::error(
-                "with_subelements not directly supported - manual conversion required".to_string()
+                "with_subelements not directly supported - manual conversion required".to_string(),
             ));
             needs_review = true;
         }
@@ -743,14 +782,17 @@ impl Converter {
             if let Some(label) = loop_control.get("label") {
                 let label_str = match label {
                     serde_yaml::Value::String(s) => s.clone(),
-                    other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                    other => serde_yaml::to_string(other)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string(),
                 };
                 output.push_str(&format!("    loop_label: {}\n", label_str));
             }
             // Check for other loop_control options that might need warnings
             if loop_control.contains_key("pause") {
                 issues.push(ConversionIssue::warning(
-                    "loop_control.pause not directly supported in Nexus".to_string()
+                    "loop_control.pause not directly supported in Nexus".to_string(),
                 ));
                 needs_review = true;
             }
@@ -842,10 +884,18 @@ impl Converter {
             if let Some(block_tasks) = &task.block {
                 output.push_str("    block:\n");
                 for block_task in block_tasks {
-                    let (task_output, task_issues, task_needs_review) = self.convert_task(block_task)?;
+                    let (task_output, task_issues, task_needs_review) =
+                        self.convert_task(block_task)?;
                     // Indent the task output by 2 more spaces
-                    let indented = task_output.lines()
-                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                    let indented = task_output
+                        .lines()
+                        .map(|line| {
+                            if line.trim().is_empty() {
+                                line.to_string()
+                            } else {
+                                format!("  {}", line)
+                            }
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     output.push_str(&indented);
@@ -861,10 +911,18 @@ impl Converter {
             if let Some(rescue_tasks) = &task.rescue {
                 output.push_str("    rescue:\n");
                 for rescue_task in rescue_tasks {
-                    let (task_output, task_issues, task_needs_review) = self.convert_task(rescue_task)?;
+                    let (task_output, task_issues, task_needs_review) =
+                        self.convert_task(rescue_task)?;
                     // Indent the task output by 2 more spaces
-                    let indented = task_output.lines()
-                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                    let indented = task_output
+                        .lines()
+                        .map(|line| {
+                            if line.trim().is_empty() {
+                                line.to_string()
+                            } else {
+                                format!("  {}", line)
+                            }
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     output.push_str(&indented);
@@ -880,10 +938,18 @@ impl Converter {
             if let Some(always_tasks) = &task.always {
                 output.push_str("    always:\n");
                 for always_task in always_tasks {
-                    let (task_output, task_issues, task_needs_review) = self.convert_task(always_task)?;
+                    let (task_output, task_issues, task_needs_review) =
+                        self.convert_task(always_task)?;
                     // Indent the task output by 2 more spaces
-                    let indented = task_output.lines()
-                        .map(|line| if line.trim().is_empty() { line.to_string() } else { format!("  {}", line) })
+                    let indented = task_output
+                        .lines()
+                        .map(|line| {
+                            if line.trim().is_empty() {
+                                line.to_string()
+                            } else {
+                                format!("  {}", line)
+                            }
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     output.push_str(&indented);
