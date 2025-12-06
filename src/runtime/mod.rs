@@ -88,8 +88,21 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
 
             match (&obj_val, &idx_val) {
                 (Value::List(list), Value::Int(i)) => {
+                    // Handle negative indices Python-style
                     let idx = if *i < 0 {
-                        (list.len() as i64 + i) as usize
+                        let adjusted = list.len() as i64 + i;
+                        if adjusted < 0 {
+                            return Err(NexusError::Runtime {
+                                function: None,
+                                message: format!(
+                                    "Index {} out of bounds for list of length {}",
+                                    i,
+                                    list.len()
+                                ),
+                                suggestion: None,
+                            });
+                        }
+                        adjusted as usize
                     } else {
                         *i as usize
                     };
@@ -111,8 +124,21 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
                     })
                 }
                 (Value::String(s), Value::Int(i)) => {
+                    let char_count = s.chars().count();
+                    // Handle negative indices Python-style
                     let idx = if *i < 0 {
-                        (s.len() as i64 + i) as usize
+                        let adjusted = char_count as i64 + i;
+                        if adjusted < 0 {
+                            return Err(NexusError::Runtime {
+                                function: None,
+                                message: format!(
+                                    "Index {} out of bounds for string of length {}",
+                                    i, char_count
+                                ),
+                                suggestion: None,
+                            });
+                        }
+                        adjusted as usize
                     } else {
                         *i as usize
                     };
@@ -121,7 +147,10 @@ pub fn evaluate_expression(expr: &Expression, ctx: &ExecutionContext) -> Result<
                         .map(|c| Value::String(c.to_string()))
                         .ok_or_else(|| NexusError::Runtime {
                             function: None,
-                            message: format!("Index {} out of bounds for string", i),
+                            message: format!(
+                                "Index {} out of bounds for string of length {}",
+                                i, char_count
+                            ),
                             suggestion: None,
                         })
                 }
@@ -237,7 +266,15 @@ fn evaluate_binary_op(
             (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
             (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a * *b as f64)),
             (Value::String(s), Value::Int(n)) | (Value::Int(n), Value::String(s)) => {
-                Ok(Value::String(s.repeat(*n as usize)))
+                if *n < 0 {
+                    Err(NexusError::Runtime {
+                        function: None,
+                        message: "Cannot multiply string by negative number".to_string(),
+                        suggestion: None,
+                    })
+                } else {
+                    Ok(Value::String(s.repeat(*n as usize)))
+                }
             }
             _ => Err(type_error("multiply", left, right)),
         },
@@ -253,13 +290,53 @@ fn evaluate_binary_op(
                     Ok(Value::Int(a / b))
                 }
             }
-            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
-            (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 / b)),
-            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a / *b as f64)),
+            (Value::Float(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err(NexusError::Runtime {
+                        function: None,
+                        message: "Division by zero".to_string(),
+                        suggestion: None,
+                    })
+                } else {
+                    Ok(Value::Float(a / b))
+                }
+            }
+            (Value::Int(a), Value::Float(b)) => {
+                if *b == 0.0 {
+                    Err(NexusError::Runtime {
+                        function: None,
+                        message: "Division by zero".to_string(),
+                        suggestion: None,
+                    })
+                } else {
+                    Ok(Value::Float(*a as f64 / b))
+                }
+            }
+            (Value::Float(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err(NexusError::Runtime {
+                        function: None,
+                        message: "Division by zero".to_string(),
+                        suggestion: None,
+                    })
+                } else {
+                    Ok(Value::Float(a / *b as f64))
+                }
+            }
             _ => Err(type_error("divide", left, right)),
         },
         BinaryOperator::Mod => match (left, right) {
-            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
+            (Value::Int(a), Value::Int(b)) => {
+                if *b == 0 {
+                    Err(NexusError::Runtime {
+                        function: None,
+                        message: "Modulo by zero".to_string(),
+                        suggestion: None,
+                    })
+                } else {
+                    Ok(Value::Int(a % b))
+                }
+            }
             _ => Err(type_error("modulo", left, right)),
         },
 
@@ -331,10 +408,9 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         }
         (Value::Dict(a), Value::Dict(b)) => {
             a.len() == b.len()
-                && a.keys().all(|k| {
-                    b.get(k)
-                        .map(|v| values_equal(a.get(k).unwrap(), v))
-                        .unwrap_or(false)
+                && a.keys().all(|k| match (a.get(k), b.get(k)) {
+                    (Some(av), Some(bv)) => values_equal(av, bv),
+                    _ => false,
                 })
         }
         _ => false,

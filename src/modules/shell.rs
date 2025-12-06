@@ -44,10 +44,15 @@ impl ShellModule {
             return Ok(TaskOutput::changed().with_stdout(msg));
         }
 
+        // Helper function to safely quote shell arguments
+        fn shell_quote(s: &str) -> String {
+            format!("'{}'", s.replace('\'', "'\\''"))
+        }
+
         // Check 'creates' condition - skip if file exists
         if let Some(ref creates_path) = creates {
             let exists = conn
-                .exec(&format!("test -e '{}'", creates_path))
+                .exec(&format!("test -e {}", shell_quote(creates_path)))
                 .await?
                 .success();
             if exists {
@@ -59,7 +64,7 @@ impl ShellModule {
         // Check 'removes' condition - skip if file doesn't exist
         if let Some(ref removes_path) = removes {
             let exists = conn
-                .exec(&format!("test -e '{}'", removes_path))
+                .exec(&format!("test -e {}", shell_quote(removes_path)))
                 .await?
                 .success();
             if !exists {
@@ -73,14 +78,13 @@ impl ShellModule {
 
         // Add chdir if specified
         if let Some(ref dir) = chdir {
-            // Change directory first
-            shell_cmd.push_str(&format!("cd '{}' && ", dir.replace('\'', "'\\'''")));
+            // Change directory first - properly quoted
+            shell_cmd.push_str(&format!("cd {} && ", shell_quote(dir)));
         }
 
         // Wrap the command in /bin/sh -c to allow shell features
         // Escape single quotes in the command
-        let escaped_command = command.replace('\'', "'\\''");
-        shell_cmd.push_str(&format!("/bin/sh -c '{}'", escaped_command));
+        shell_cmd.push_str(&format!("/bin/sh -c {}", shell_quote(command)));
 
         // Wrap command with sudo if needed
         let final_command = ctx.wrap_command(&shell_cmd);

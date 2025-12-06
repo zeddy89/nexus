@@ -39,6 +39,60 @@ pub struct AsyncJobTracker {
     jobs: Arc<Mutex<HashMap<String, HashMap<JobId, AsyncJobInfo>>>>,
 }
 
+/// RAII guard to ensure async job cleanup on drop/cancellation
+struct AsyncJobGuard<'a> {
+    tracker: &'a AsyncJobTracker,
+    conn: &'a SshConnection,
+    job_id: String,
+    /// Set to false if the job completed successfully
+    cleanup_on_drop: bool,
+}
+
+impl<'a> AsyncJobGuard<'a> {
+    fn new(tracker: &'a AsyncJobTracker, conn: &'a SshConnection, job_id: String) -> Self {
+        AsyncJobGuard {
+            tracker,
+            conn,
+            job_id,
+            cleanup_on_drop: true,
+        }
+    }
+
+    /// Mark the job as completed successfully (don't cleanup on drop)
+    fn success(&mut self) {
+        self.cleanup_on_drop = false;
+    }
+
+    fn job_id(&self) -> &str {
+        &self.job_id
+    }
+}
+
+impl<'a> Drop for AsyncJobGuard<'a> {
+    fn drop(&mut self) {
+        // CRITICAL BUG FIX: Cleanup async jobs on cancellation
+        // If this guard is dropped without calling success(), it means the task was cancelled
+        // or failed before completion. We need to kill and cleanup the remote job.
+        if self.cleanup_on_drop {
+            // We can't use async in Drop, so we'll just mark the job for cleanup
+            // and let the background cleanup handle it. For now, we'll do a blocking cleanup.
+            // This is not ideal but ensures jobs don't leak on cancellation.
+            let tracker = self.tracker;
+            let conn = self.conn;
+            let job_id = self.job_id.clone();
+
+            // Use tokio's block_in_place to run async code in Drop
+            // This is safe because we're in a tokio runtime context
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    let _ = tracker.kill_job(conn, &job_id).await;
+                    let _ = tracker.cleanup_job(conn, &job_id).await;
+                })
+            });
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct AsyncJobInfo {
@@ -184,18 +238,21 @@ impl AsyncJobTracker {
         poll_interval: u64,
         max_retries: u32,
     ) -> Result<TaskOutput, NexusError> {
+        // CRITICAL BUG FIX: Use guard to ensure cleanup on cancellation
+        let mut guard = AsyncJobGuard::new(self, conn, job_id.to_string());
+
         let poll_duration = Duration::from_secs(poll_interval);
         let mut attempts = 0;
 
         loop {
-            let status = self.check_status(conn, job_id).await?;
+            let status = self.check_status(conn, guard.job_id()).await?;
 
             match status {
                 JobStatus::Running { .. } => {
                     attempts += 1;
                     if attempts >= max_retries {
-                        // Timeout - kill the job
-                        self.kill_job(conn, job_id).await?;
+                        // Timeout - kill the job (guard will cleanup on drop)
+                        self.kill_job(conn, guard.job_id()).await?;
                         return Ok(TaskOutput::failed(format!(
                             "Async job timed out after {} polls",
                             max_retries
@@ -210,6 +267,9 @@ impl AsyncJobTracker {
                     stdout,
                     stderr,
                 } => {
+                    // Mark guard as successful to prevent cleanup on drop
+                    guard.success();
+
                     // Cleanup job files
                     self.cleanup_job(conn, job_id).await.ok();
 
@@ -229,12 +289,16 @@ impl AsyncJobTracker {
                     }
                 }
                 JobStatus::Failed { error } => {
+                    // Guard will cleanup on drop
                     return Ok(TaskOutput::failed(error));
                 }
                 JobStatus::TimedOut => {
+                    // Guard will cleanup on drop
                     return Ok(TaskOutput::failed("Async job timed out"));
                 }
                 JobStatus::NotFound => {
+                    // Job already cleaned up
+                    guard.success();
                     return Ok(TaskOutput::failed("Async job not found"));
                 }
             }

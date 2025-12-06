@@ -270,6 +270,7 @@ mod tests {
     use crate::inventory::Host;
     use std::sync::Arc;
 
+    #[allow(dead_code)]
     fn create_test_context() -> ExecutionContext {
         let host = Host::new("test-host");
         ExecutionContext::new(Arc::new(host), HashMap::new())

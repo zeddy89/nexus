@@ -240,17 +240,25 @@ impl FileModule {
                 // If sudo is enabled, use tee to write file (SFTP can't use sudo)
                 if ctx.sudo {
                     // Use base64 encoding to safely transfer content through shell
+                    // Write to temp file first, then atomically move to final location
                     let encoded = base64::Engine::encode(
                         &base64::engine::general_purpose::STANDARD,
                         content.as_bytes(),
                     );
+                    let temp_path = format!("{}.nexus-tmp-{}", path, std::process::id());
                     let cmd = format!(
-                        "echo {} | base64 -d | tee {} > /dev/null",
+                        "echo {} | base64 -d > {} && mv {} {}",
                         encoded,
+                        shell_quote(&temp_path),
+                        shell_quote(&temp_path),
                         shell_quote(path)
                     );
                     let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
                     if !result.success() {
+                        // Clean up temp file on failure
+                        let _ = conn
+                            .exec(&ctx.wrap_command(&format!("rm -f {}", shell_quote(&temp_path))))
+                            .await;
                         return Err(NexusError::Module(Box::new(ModuleError {
                             module: "file".to_string(),
                             task_name: String::new(),
@@ -355,7 +363,7 @@ impl FileModule {
             }
         }
 
-        // Set ownership
+        // Set ownership - check if it needs to change first
         if owner.is_some() || group.is_some() {
             let ownership = match (&owner, &group) {
                 (Some(o), Some(g)) => format!("{}:{}", o, g),
@@ -364,20 +372,34 @@ impl FileModule {
                 (None, None) => unreachable!(),
             };
 
-            let cmd = format!("chown {} {}", ownership, shell_quote(path));
-            let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
-            if !result.success() {
-                return Err(NexusError::Module(Box::new(ModuleError {
-                    module: "file".to_string(),
-                    task_name: String::new(),
-                    host: conn.host_name().to_string(),
-                    message: format!("Failed to set ownership on {}", path),
-                    stderr: Some(result.stderr),
-                    suggestion: None,
-                })));
+            // Get current ownership to check if change is needed
+            let current_ownership_result = conn
+                .exec(&format!(
+                    "stat -c '%U:%G' {} 2>/dev/null || stat -f '%Su:%Sg' {}",
+                    shell_quote(path),
+                    shell_quote(path)
+                ))
+                .await?;
+
+            let needs_change = !current_ownership_result.success()
+                || current_ownership_result.stdout.trim() != ownership;
+
+            if needs_change {
+                let cmd = format!("chown {} {}", ownership, shell_quote(path));
+                let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
+                if !result.success() {
+                    return Err(NexusError::Module(Box::new(ModuleError {
+                        module: "file".to_string(),
+                        task_name: String::new(),
+                        host: conn.host_name().to_string(),
+                        message: format!("Failed to set ownership on {}", path),
+                        stderr: Some(result.stderr),
+                        suggestion: None,
+                    })));
+                }
+                changed = true;
+                output_lines.push(format!("Set ownership {} on {}", ownership, path));
             }
-            changed = true;
-            output_lines.push(format!("Set ownership {} on {}", ownership, path));
         }
 
         let mut output = if changed {
@@ -430,17 +452,20 @@ impl FileModule {
             output_lines.push(format!("Created directory {}", path));
         }
 
-        // Set mode
-        if let Some(m) = mode {
-            let cmd = format!("chmod {} {}", m, shell_quote(path));
-            let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
-            if result.success() {
-                changed = true;
-                output_lines.push(format!("Set mode {} on {}", m, path));
+        // Set mode - check if it needs to change first
+        if let Some(ref m) = mode {
+            let current_mode = get_file_mode(conn, path).await?;
+            if current_mode.as_deref() != Some(m.as_str()) {
+                let cmd = format!("chmod {} {}", m, shell_quote(path));
+                let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
+                if result.success() {
+                    changed = true;
+                    output_lines.push(format!("Set mode {} on {}", m, path));
+                }
             }
         }
 
-        // Set ownership
+        // Set ownership - check if it needs to change first
         if owner.is_some() || group.is_some() {
             let ownership = match (&owner, &group) {
                 (Some(o), Some(g)) => format!("{}:{}", o, g),
@@ -449,11 +474,25 @@ impl FileModule {
                 (None, None) => unreachable!(),
             };
 
-            let cmd = format!("chown {} {}", ownership, shell_quote(path));
-            let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
-            if result.success() {
-                changed = true;
-                output_lines.push(format!("Set ownership {} on {}", ownership, path));
+            // Get current ownership to check if change is needed
+            let current_ownership_result = conn
+                .exec(&format!(
+                    "stat -c '%U:%G' {} 2>/dev/null || stat -f '%Su:%Sg' {}",
+                    shell_quote(path),
+                    shell_quote(path)
+                ))
+                .await?;
+
+            let needs_change = !current_ownership_result.success()
+                || current_ownership_result.stdout.trim() != ownership;
+
+            if needs_change {
+                let cmd = format!("chown {} {}", ownership, shell_quote(path));
+                let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
+                if result.success() {
+                    changed = true;
+                    output_lines.push(format!("Set ownership {} on {}", ownership, path));
+                }
             }
         }
 
@@ -552,7 +591,6 @@ impl FileModule {
         group: Option<String>,
         mode: Option<String>,
     ) -> Result<TaskOutput, NexusError> {
-        let mut changed = false;
         let mut output_lines = Vec::new();
 
         let exists = conn
@@ -573,21 +611,28 @@ impl FileModule {
             })));
         }
 
+        // Touch always modifies the file (creates or updates timestamp)
+        let mut changed = true;
         if !exists {
-            changed = true;
             output_lines.push(format!("Created {}", path));
         } else {
             output_lines.push(format!("Updated timestamp on {}", path));
         }
 
-        // Set mode
-        if let Some(m) = mode {
-            let cmd = format!("chmod {} {}", m, shell_quote(path));
-            conn.exec(&ctx.wrap_command(&cmd)).await?;
-            changed = true;
+        // Set mode - check if it needs to change first
+        if let Some(ref m) = mode {
+            let current_mode = get_file_mode(conn, path).await?;
+            if current_mode.as_deref() != Some(m.as_str()) {
+                let cmd = format!("chmod {} {}", m, shell_quote(path));
+                let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
+                if result.success() {
+                    changed = true;
+                    output_lines.push(format!("Set mode {} on {}", m, path));
+                }
+            }
         }
 
-        // Set ownership
+        // Set ownership - check if it needs to change first
         if owner.is_some() || group.is_some() {
             let ownership = match (&owner, &group) {
                 (Some(o), Some(g)) => format!("{}:{}", o, g),
@@ -595,9 +640,27 @@ impl FileModule {
                 (None, Some(g)) => format!(":{}", g),
                 (None, None) => unreachable!(),
             };
-            let cmd = format!("chown {} {}", ownership, shell_quote(path));
-            conn.exec(&ctx.wrap_command(&cmd)).await?;
-            changed = true;
+
+            // Get current ownership to check if change is needed
+            let current_ownership_result = conn
+                .exec(&format!(
+                    "stat -c '%U:%G' {} 2>/dev/null || stat -f '%Su:%Sg' {}",
+                    shell_quote(path),
+                    shell_quote(path)
+                ))
+                .await?;
+
+            let needs_change = !current_ownership_result.success()
+                || current_ownership_result.stdout.trim() != ownership;
+
+            if needs_change {
+                let cmd = format!("chown {} {}", ownership, shell_quote(path));
+                let result = conn.exec(&ctx.wrap_command(&cmd)).await?;
+                if result.success() {
+                    changed = true;
+                    output_lines.push(format!("Set ownership {} on {}", ownership, path));
+                }
+            }
         }
 
         let output = if changed {

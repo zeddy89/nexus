@@ -83,22 +83,14 @@ impl ConnectionPool {
         if let Some(mut conns) = self.connections.get_mut(&key) {
             while let Some(conn) = conns.pop() {
                 if conn.is_valid() {
-                    return Ok(SshConnection {
-                        inner: conn,
-                        pool_key: key,
-                        return_to_pool: true,
-                    });
+                    return Ok(SshConnection { inner: conn });
                 }
             }
         }
 
         // Create new connection
         let conn = self.connect(host)?;
-        Ok(SshConnection {
-            inner: conn,
-            pool_key: key,
-            return_to_pool: true,
-        })
+        Ok(SshConnection { inner: conn })
     }
 
     /// Get the appropriate connection type for a host (SSH or local)
@@ -273,19 +265,47 @@ impl PooledConnection {
 
     /// Execute a command on this connection
     pub fn exec(&self, command: &str) -> Result<CommandResult, NexusError> {
-        let mut channel = self
-            .session
-            .channel_session()
-            .map_err(|e| NexusError::Ssh {
-                host: self.host_name.clone(),
-                message: format!("Failed to open channel: {}", e),
-                suggestion: None,
-            })?;
+        let mut channel = self.session.channel_session().map_err(|e| {
+            // CRITICAL BUG FIX: Detect timeout and connection errors
+            // These errors mean the connection is bad and should not be reused
+            let is_connection_error = e.to_string().contains("timeout")
+                || e.to_string().contains("Connection")
+                || e.to_string().contains("Broken pipe");
 
-        channel.exec(command).map_err(|e| NexusError::Ssh {
-            host: self.host_name.clone(),
-            message: format!("Failed to execute command: {}", e),
-            suggestion: None,
+            NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!(
+                    "Failed to open channel{}: {}",
+                    if is_connection_error {
+                        " (connection error)"
+                    } else {
+                        ""
+                    },
+                    e
+                ),
+                suggestion: if is_connection_error {
+                    Some("Connection will be discarded due to error".to_string())
+                } else {
+                    None
+                },
+            }
+        })?;
+
+        channel.exec(command).map_err(|e| {
+            let is_timeout = e.to_string().contains("timeout");
+            NexusError::Ssh {
+                host: self.host_name.clone(),
+                message: format!(
+                    "Failed to execute command{}: {}",
+                    if is_timeout { " (timeout)" } else { "" },
+                    e
+                ),
+                suggestion: if is_timeout {
+                    Some("Command timed out. Connection will be discarded.".to_string())
+                } else {
+                    None
+                },
+            }
         })?;
 
         let mut stdout = String::new();
@@ -465,11 +485,8 @@ impl PooledConnection {
 }
 
 /// RAII wrapper for pooled connections
-#[allow(dead_code)]
 pub struct SshConnection {
     inner: PooledConnection,
-    pool_key: String,
-    return_to_pool: bool,
 }
 
 impl SshConnection {
@@ -500,11 +517,6 @@ impl SshConnection {
 
     pub fn read_file(&self, path: &str) -> Result<Vec<u8>, NexusError> {
         self.inner.read_file(path)
-    }
-
-    /// Don't return this connection to the pool
-    pub fn discard(&mut self) {
-        self.return_to_pool = false;
     }
 
     pub fn host_name(&self) -> &str {

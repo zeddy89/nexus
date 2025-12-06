@@ -27,6 +27,11 @@ impl CommandModule {
         creates: Option<String>,
         removes: Option<String>,
     ) -> Result<TaskOutput, NexusError> {
+        // Helper function to safely quote shell arguments
+        fn shell_quote(s: &str) -> String {
+            format!("'{}'", s.replace('\'', "'\\''"))
+        }
+
         // Check mode
         if ctx.check_mode {
             let mut msg = format!("Would execute command: {}", command);
@@ -42,7 +47,7 @@ impl CommandModule {
         // Check 'creates' condition - skip if file exists
         if let Some(ref creates_path) = creates {
             let exists = conn
-                .exec(&format!("test -e '{}'", creates_path))
+                .exec(&format!("test -e {}", shell_quote(creates_path)))
                 .await?
                 .success();
             if exists {
@@ -54,7 +59,7 @@ impl CommandModule {
         // Check 'removes' condition - skip if file doesn't exist
         if let Some(ref removes_path) = removes {
             let exists = conn
-                .exec(&format!("test -e '{}'", removes_path))
+                .exec(&format!("test -e {}", shell_quote(removes_path)))
                 .await?
                 .success();
             if !exists {

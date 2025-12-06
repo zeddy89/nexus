@@ -232,7 +232,7 @@ mod tests {
         assert!(!registry.has_pending());
 
         // Add a handler to execution order
-        let mut registry = HandlerRegistry {
+        let registry = HandlerRegistry {
             execution_order: vec!["restart_nginx".to_string()],
             ..Default::default()
         };

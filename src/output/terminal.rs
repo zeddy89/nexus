@@ -20,6 +20,12 @@ impl TerminalOutput {
     pub fn new(verbose: bool, quiet: bool) -> Self {
         let is_tty = atty::is(atty::Stream::Stdout);
 
+        // Respect NO_COLOR environment variable (https://no-color.org/)
+        // Also disable colors if not a TTY
+        if std::env::var("NO_COLOR").is_ok() || !is_tty {
+            colored::control::set_override(false);
+        }
+
         TerminalOutput {
             multi_progress: MultiProgress::new(),
             verbose,
@@ -91,16 +97,12 @@ impl TerminalOutput {
             "OK".green()
         };
 
-        if self.is_tty {
-            println!(
-                "  {} {} {}",
-                status,
-                "=>".dimmed(),
-                result.host.white().bold()
-            );
-        } else {
-            println!("{}: {} - {}", result.host, status, result.task_name);
-        }
+        println!(
+            "  {} {} {}",
+            status,
+            "=>".dimmed(),
+            result.host.white().bold()
+        );
 
         if self.verbose || result.failed {
             if let Some(stdout) = &result.stdout {
@@ -415,13 +417,16 @@ impl StreamingOutput {
 
 /// Helper for checking if stdout is a TTY
 mod atty {
+    use std::io::IsTerminal;
+
     pub enum Stream {
         Stdout,
     }
 
-    pub fn is(_stream: Stream) -> bool {
-        // Simple check - could be enhanced with proper atty crate
-        std::env::var("TERM").is_ok()
+    pub fn is(stream: Stream) -> bool {
+        match stream {
+            Stream::Stdout => std::io::stdout().is_terminal(),
+        }
     }
 }
 

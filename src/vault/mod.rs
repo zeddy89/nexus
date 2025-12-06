@@ -7,10 +7,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
-use argon2::{
-    password_hash::{PasswordHasher, SaltString},
-    Argon2,
-};
+use argon2::{Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::RngCore;
 use std::path::Path;
@@ -99,28 +96,44 @@ impl VaultCipher {
 
 /// Derive a 256-bit encryption key from a password using Argon2
 fn derive_key(password: &str, salt: Option<&[u8]>) -> Result<Zeroizing<Vec<u8>>, VaultError> {
-    let argon2 = Argon2::default();
+    // Use secure Argon2 parameters:
+    // - Memory cost: 64 MB (65536 KiB)
+    // - Iterations: 3
+    // - Parallelism: 4 threads
+    // - Output length: 32 bytes for AES-256
+    let params = Params::new(
+        65536,    // m_cost: 64 MB
+        3,        // t_cost: 3 iterations
+        4,        // p_cost: 4 parallel threads
+        Some(32), // output length: 32 bytes for AES-256-GCM
+    )
+    .map_err(|e| VaultError::KeyDerivationError(format!("Invalid Argon2 params: {}", e)))?;
 
-    let salt_string = if let Some(salt_bytes) = salt {
-        SaltString::encode_b64(salt_bytes)
-            .map_err(|e| VaultError::KeyDerivationError(e.to_string()))?
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id, // Argon2id is recommended (resistant to side-channel and GPU attacks)
+        Version::V0x13,              // Latest version
+        params,
+    );
+
+    // Generate or use provided salt (16 bytes, cryptographically random)
+    let salt_bytes = if let Some(salt_input) = salt {
+        if salt_input.len() < 16 {
+            return Err(VaultError::KeyDerivationError(
+                "Salt must be at least 16 bytes".to_string(),
+            ));
+        }
+        salt_input.to_vec()
     } else {
-        SaltString::generate(&mut OsRng)
+        let mut salt = vec![0u8; 16];
+        OsRng.fill_bytes(&mut salt);
+        salt
     };
 
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt_string)
-        .map_err(|e| VaultError::KeyDerivationError(e.to_string()))?;
-
-    // Extract the hash bytes (32 bytes for AES-256)
-    let hash_str = password_hash
-        .hash
-        .ok_or_else(|| VaultError::KeyDerivationError("Failed to generate hash".to_string()))?;
-
-    // Convert hash to bytes
+    // Derive key material directly (32 bytes for AES-256)
     let mut key = Zeroizing::new(vec![0u8; 32]);
-    let hash_bytes = hash_str.as_bytes();
-    key[..hash_bytes.len().min(32)].copy_from_slice(&hash_bytes[..hash_bytes.len().min(32)]);
+    argon2
+        .hash_password_into(password.as_bytes(), &salt_bytes, &mut key)
+        .map_err(|e| VaultError::KeyDerivationError(format!("Key derivation failed: {}", e)))?;
 
     Ok(key)
 }

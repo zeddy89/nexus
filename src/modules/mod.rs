@@ -500,16 +500,130 @@ impl ModuleExecutor {
                     .map(|e| evaluate_expression(e, ctx))
                     .transpose()?;
 
-                // Build git clone command
-                let mut cmd = format!("git clone {}", repo_val);
+                // Helper function to quote strings safely for shell
+                fn shell_quote(s: &str) -> String {
+                    format!("'{}'", s.replace('\'', "'\\''"))
+                }
+
+                // Check if destination exists and is a git repo
+                let dest_quoted = shell_quote(&dest_val.to_string());
+                let check_exists = conn
+                    .as_connection()
+                    .exec(&format!("test -d {}/.git", dest_quoted))
+                    .await?
+                    .success();
+
+                if check_exists {
+                    // Repo exists - check if we need to update it
+                    let current_remote = conn
+                        .as_connection()
+                        .exec(&format!(
+                            "cd {} && git config --get remote.origin.url",
+                            dest_quoted
+                        ))
+                        .await?;
+
+                    let remote_matches = current_remote.success()
+                        && current_remote.stdout.trim() == repo_val.to_string();
+
+                    if !remote_matches && !force.unwrap_or(false) {
+                        return Err(NexusError::Module(Box::new(ModuleError {
+                            module: "git".to_string(),
+                            task_name: String::new(),
+                            host: conn.as_connection().host_name().to_string(),
+                            message: format!(
+                                "Directory {} exists but is not the expected repo. Use force=true to overwrite",
+                                dest_val
+                            ),
+                            stderr: None,
+                            suggestion: Some("Set force: true to remove and re-clone".to_string()),
+                        })));
+                    }
+
+                    // Check version if specified
+                    if let Some(ref v) = version_val {
+                        let current_branch = conn
+                            .as_connection()
+                            .exec(&format!(
+                                "cd {} && git rev-parse --abbrev-ref HEAD",
+                                dest_quoted
+                            ))
+                            .await?;
+
+                        let version_str = v.to_string();
+                        if current_branch.success() && current_branch.stdout.trim() == version_str {
+                            // Already at correct version
+                            return Ok(TaskOutput::success().with_stdout(format!(
+                                "Repository {} already at version {}",
+                                dest_val, version_str
+                            )));
+                        }
+
+                        // Need to checkout the version
+                        let checkout_cmd = format!(
+                            "cd {} && git fetch origin && git checkout {}",
+                            dest_quoted,
+                            shell_quote(&version_str)
+                        );
+                        let result = conn
+                            .as_connection()
+                            .exec(&ctx.wrap_command(&checkout_cmd))
+                            .await?;
+
+                        if result.success() {
+                            return Ok(TaskOutput::changed().with_stdout(format!(
+                                "Checked out version {} in {}",
+                                version_str, dest_val
+                            )));
+                        } else {
+                            return Err(NexusError::Module(Box::new(ModuleError {
+                                module: "git".to_string(),
+                                task_name: String::new(),
+                                host: conn.as_connection().host_name().to_string(),
+                                message: format!("Failed to checkout version {}", version_str),
+                                stderr: Some(result.stderr),
+                                suggestion: None,
+                            })));
+                        }
+                    } else {
+                        // No version specified, repo exists - just update it
+                        let pull_cmd = format!("cd {} && git pull", dest_quoted);
+                        let result = conn
+                            .as_connection()
+                            .exec(&ctx.wrap_command(&pull_cmd))
+                            .await?;
+
+                        if result.success() {
+                            // Check if anything was updated
+                            let already_up_to_date = result.stdout.contains("Already up to date")
+                                || result.stdout.contains("Already up-to-date");
+
+                            if already_up_to_date {
+                                return Ok(TaskOutput::success().with_stdout(format!(
+                                    "Repository {} already up to date",
+                                    dest_val
+                                )));
+                            } else {
+                                return Ok(TaskOutput::changed()
+                                    .with_stdout(format!("Updated repository {}", dest_val)));
+                            }
+                        }
+                    }
+                }
+
+                // Repo doesn't exist or force=true - clone it
+                let repo_quoted = shell_quote(&repo_val.to_string());
+                let mut cmd = format!("git clone {}", repo_quoted);
                 if let Some(ref v) = version_val {
-                    cmd.push_str(&format!(" --branch {}", v));
+                    cmd.push_str(&format!(" --branch {}", shell_quote(&v.to_string())));
                 }
-                if force.unwrap_or(false) {
+
+                if force.unwrap_or(false) && check_exists {
                     // For force, remove dest first then clone
-                    cmd = format!("rm -rf {} && {}", dest_val, cmd);
+                    cmd = format!("rm -rf {} && {}", dest_quoted, cmd);
                 }
-                cmd.push_str(&format!(" {}", dest_val));
+
+                cmd.push_str(&format!(" {}", dest_quoted));
 
                 self.shell
                     .execute_with_params(ctx, conn.as_connection(), &cmd, None, None, None)

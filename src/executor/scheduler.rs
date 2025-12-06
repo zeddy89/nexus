@@ -1647,9 +1647,9 @@ async fn execute_task_body(
     };
 
     // Execute the module
-    let output = modules.execute(&task.module, ctx, &conn).await?;
+    let mut output = modules.execute(&task.module, ctx, &conn).await?;
 
-    // Register output if requested
+    // Register output if requested (before changed_when/fail_when evaluation)
     if let Some(ref var_name) = task.register {
         ctx.register(var_name, output.clone());
     }
@@ -1663,6 +1663,19 @@ async fn execute_task_body(
                 fail_when
             )));
         }
+    }
+
+    // CRITICAL BUG FIX: Evaluate changed_when condition
+    // This was completely missing, causing changed status to be incorrectly reported
+    if let Some(ref changed_when) = task.changed_when {
+        // Register output temporarily if not already registered for evaluation
+        if task.register.is_none() {
+            ctx.register("result", output.clone());
+        }
+
+        let result = evaluate_expression(changed_when, ctx)?;
+        // Override the changed status based on the condition
+        output.changed = result.is_truthy();
     }
 
     Ok(output)

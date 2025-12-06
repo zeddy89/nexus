@@ -1,9 +1,21 @@
 // Human-readable error messages for Nexus
 
 use std::fmt;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 
 use colored::*;
+
+/// Initialize color output based on TTY detection and NO_COLOR environment variable
+fn should_use_colors() -> bool {
+    // Check NO_COLOR environment variable first (https://no-color.org/)
+    if std::env::var("NO_COLOR").is_ok() {
+        return false;
+    }
+
+    // Check if stderr is a TTY (errors are typically written to stderr)
+    std::io::stderr().is_terminal()
+}
 
 /// All error types in Nexus
 #[derive(Debug)]
@@ -95,6 +107,12 @@ impl std::error::Error for NexusError {}
 
 impl fmt::Display for NexusError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Set color mode based on TTY detection and NO_COLOR
+        let use_colors = should_use_colors();
+        if !use_colors {
+            colored::control::set_override(false);
+        }
+
         match self {
             NexusError::Parse(err) => {
                 writeln!(f, "{}: {}", "ERROR".red().bold(), err.message)?;
@@ -248,6 +266,12 @@ impl fmt::Display for NexusError {
 
 /// Format a source code snippet with error highlighting
 pub fn format_source_error(source: &str, line: usize, column: usize, message: &str) -> String {
+    // Respect color settings
+    let use_colors = should_use_colors();
+    if !use_colors {
+        colored::control::set_override(false);
+    }
+
     let mut result = String::new();
     let lines: Vec<&str> = source.lines().collect();
 
